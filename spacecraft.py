@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.integrate import odeint, solve_ivp
+from sgp4.api import Satrec
 
 import misc as _misc
 
@@ -28,12 +29,14 @@ class Platform:
 @dataclass
 class Orbit:
     """Base class for a spacecraft orbit"""
-    sma0: float = R_E + 500000.  # 500km altitude
-    ecc0: float = 0.0
-    inc0: float = math.pi / 2  # 90 deg
-    aop0: float = 0.0
-    raan0: float = 0.0
-    ta0: float = 0.0
+    # sma0: float = R_E + 500000.  # 500km altitude
+    # ecc0: float = 0.0
+    # inc0: float = math.pi / 2  # 90 deg
+    # aop0: float = 0.0
+    # raan0: float = 0.0
+    # ta0: float = 0.0
+    tle_s: str = "1 39429C 13066P 22343.34114583 -.00005658  00000-0 -95669-3 0  3433"
+    tle_t: str = "2 39429  97.8100 247.5760 0141660 186.6832 272.9669 14.62999519"
     jd0: int | float = 2460026.  # 12:00, 22 Mar 2023
 
     eci: np.ndarray = field(init=False, default=None)
@@ -42,6 +45,7 @@ class Orbit:
     times: np.ndarray = None
 
     def __post_init__(self):
+        self.satellite = Satrec.twoline2rv(self.tle_s, self.tle_t)
         self.coe0 = [self.sma0, self.ecc0, self.inc0, self.aop0, self.raan0, self.ta0]
         self.mee0 = _misc.coe_to_mee(self.coe0)
 
@@ -89,8 +93,12 @@ class Orbit:
 @dataclass
 class Spacecraft:
     """ Main entry point of the app """
-    platform: Platform
-    orbit: Orbit
+    tle_s: str = "1 39429C 13066P 22343.34114583 -.00005658  00000-0 -95669-3 0  3433"
+    tle_t: str = "2 39429  97.8100 247.5760 0141660 186.6832 272.9669 14.62999519"
+
+    def __post_init__(self):
+        self.satellite = Satrec.twoline2rv(self.tle_s, self.tle_t)
+
 
 
 if __name__ == "__main__":
