@@ -71,6 +71,12 @@ class Orbit:
         # get keplerian and cartesian results from modified equinoctial elements
         self.eci = np.array([tuple(_misc.mee_to_cart(x)) for x in self.mee])
 
+        lla = []
+        for idx, r_position in enumerate(self.eci[:, 0:3]):
+            lla.append(_misc.eci_to_geod(
+                self.jd0 + self.times[idx][0] / 86400, r_position))
+        self.lla = np.array(lla)
+
     @property
     def period(self):
         return 2 * math.pi * math.sqrt(self.sma0 ** 3 / MU_E)
