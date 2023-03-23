@@ -7,6 +7,7 @@ __author__ = "Christopher Lowe"
 
 import math
 from dataclasses import dataclass, field
+from typing import List
 
 import numpy as np
 from scipy.integrate import odeint, solve_ivp
@@ -92,13 +93,36 @@ class Orbit:
 
 @dataclass
 class Spacecraft:
-    """ Main entry point of the app """
-    tle_s: str = "1 39429C 13066P 22343.34114583 -.00005658  00000-0 -95669-3 0  3433"
-    tle_t: str = "2 39429  97.8100 247.5760 0141660 186.6832 272.9669 14.62999519"
+    """ Spacecraft baseclass """
+
+    tle: List[str] = field(default_factory=lambda: [
+        "1 39429C 13066P 22343.34114583 -.00005658  00000-0 -95669-3 0 3433",
+        "2 39429  97.8100 247.5760 0141660 186.6832 272.9669 14.62999519"
+    ])  # DOVE-3 satellite
 
     def __post_init__(self):
-        self.satellite = Satrec.twoline2rv(self.tle_s, self.tle_t)
+        self.satellite = Satrec.twoline2rv(self.tle[0], self.tle[1])
 
+    def get_position(self, jd: int | float, fr: int | float = 0):
+        """
+        Get position and velocity at a specific date.
+        """
+        if jd + fr < self.satellite.jdsatepoch + self.satellite.jdsatepochF:
+            raise ValueError("Cannot return position prior to TLE epoch")
+
+        e, r, v = self.satellite.sgp4(jd, fr)
+        if e:
+            raise Exception(f"Error in SGP4 propagation: {e}")
+        return r, v
+
+    def get_position_array(self, jd: np.ndarray, fr: np.ndarray = None):
+        if min(jd) + min(fr) < self.satellite.jdsatepoch + self.satellite.jdsatepochF:
+            raise ValueError("Cannot return position prior to TLE epoch")
+
+        e, r, v = self.satellite.sgp4_array(jd, fr)
+        if any(e):
+            raise Exception(f"Error in SGP4 propagation: {e}")
+        return r, v
 
 
 if __name__ == "__main__":
