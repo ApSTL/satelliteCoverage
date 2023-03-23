@@ -12,7 +12,7 @@ from typing import List
 import numpy as np
 from scipy.integrate import odeint, solve_ivp
 from sgp4.api import Satrec
-from skyfield.api import EarthSatellite, load
+from skyfield.api import EarthSatellite, load, wgs84
 
 import misc as _misc
 
@@ -27,10 +27,9 @@ class Spacecraft:
     """ Spacecraft baseclass """
 
     tle: List[str] = field(default_factory=lambda: [
-        '1 39418U 13066C   23081.74267126  .00004725  00000+0  36677-3 0  9999',
-        '2 39418  97.5386 150.1649 0032504  41.8733 318.4969 15.01401933510385'
+        "1 39418U 13066C   23081.74267126  .00004725  00000+0  36677-3 0  9999",
+        "2 39418  97.5386 150.1649 0032504  41.8733 318.4969 15.01401933510385"
     ]),  # SKYSAT-A satellite
-    name: str = None
 
     def __post_init__(self):
         self.satrec = Satrec.twoline2rv(self.tle[0], self.tle[1])
@@ -59,19 +58,31 @@ class Spacecraft:
 
 if __name__ == "__main__":
     """ This is executed when run from the command line """
+
+    # Example from the Skyfield docs
     line1 = '1 25544U 98067A   14020.93268519  .00009878  00000-0  18200-3 0  5082'
     line2 = '2 25544  51.6498 109.4756 0003572  55.9686 274.8005 15.49815350868473'
     ts = load.timescale()
-
     satellite = EarthSatellite(line1, line2, 'ISS (ZARYA)', ts)
     t = ts.utc(2014, 1, 23, 11, 18, 7)
     geocentric = satellite.at(t)
 
-    line1 = '1 39418U 13066C   23081.74267126  .00004725  00000+0  36677-3 0  9999'
-    line2 = '2 39418  97.5386 150.1649 0032504  41.8733 318.4969 15.01401933510385'
+    # Example using Planet's SKYSAT-A satellite and custom class
+    tle = """SKYSAT-A
+    1 39418U 13066C   23081.74267126  .00004725  00000+0  36677-3 0  9999
+    2 39418  97.5386 150.1649 0032504  41.8733 318.4969 15.01401933510385"""
+    lines = [t.strip() for t in tle.splitlines()]
     ts = load.timescale()
-    s = Spacecraft(name="SKYSAT-A")
+    s = Spacecraft([lines[1], lines[2]])
     satellite2 = EarthSatellite.from_satrec(s.satrec, ts)
     t = ts.utc(2023, 3, 23, 18, 1)
     geocentric2 = satellite2.at(t)
     print(geocentric2.position.km)
+    lat, lon = wgs84.latlon_of(geocentric2)
+    print('Latitude:', lat)
+    print('Longitude:', lon)
+
+    # Alternative that gives the sub-satellite point (same results as above)
+    # lat_lon = wgs84.subpoint_of(geocentric2)
+    # print('Latitude_:', lat_lon.latitude)
+    # print('Longitude_:', lat_lon.longitude)
