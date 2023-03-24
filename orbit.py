@@ -42,7 +42,7 @@ class Orbit:
             t_eval=self.times
         )
         self.mee = np.transpose(sol.y)
-        self.times = np.transpose(np.atleast_2d(sol.t))
+        self.times = np.transpose(np.atleast_2d(sol.target))
 
         # get keplerian and cartesian results from modified equinoctial elements
         self.eci = np.array([tuple(_misc.mee_to_cart(x)) for x in self.mee])

@@ -2,15 +2,14 @@
 Main run file to get image acquisition-delivery probabilities over specific locations,
 given cloud coverage data and satellite position data
 """
-import datetime
 
-from skyfield.api import wgs84, load
+from skyfield.api import wgs84, load, Time
 
 
 class Image:
 	"""Image base class"""
 	def __init__(
-			self, time_capture: datetime.datetime, satellite: str, cloud: float = 0.):
+			self, time_capture: Time, satellite: str, cloud: float = 0.):
 		self.time = time_capture
 		self.satellite = satellite
 		self.cloud = cloud
@@ -44,10 +43,21 @@ if __name__ == "__main__":
 	]
 
 	# Time horizon parameters, between which image capture and download events are found
-	time_start = load.timescale().utc(2023, 3, 24)
-	time_end = load.timescale().utc(2023, 3, 31)
+	t0 = load.timescale().utc(2023, 3, 24)
+	t1 = load.timescale().utc(2023, 3, 26)
 
 	# Data store for image events. Each key corresponds to a particular target location
 	# (using their ID), and the value is an empty list that will get populated with
 	# discrete image events and their associated information
-	image_events = {t: [] for t in targets}
+	image_events = {target: [] for target in targets}
+
+	for target, location in targets.items():
+		for satellite in satellites:
+			# Get the rise, culmination and fall for all passes between this
+			# satellite:target pair during the time horizon
+			t, events = satellite.find_events(location, t0, t1, altitude_degrees=30.0)
+			for ti, event in zip(t, events):
+				if event == 1:  # If this is the "peak" of the pass
+					image_events[target].append(Image(ti, satellite.name))
+
+	print('')
