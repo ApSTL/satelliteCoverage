@@ -57,15 +57,14 @@ class Spacecraft:
 
 
 if __name__ == "__main__":
-    """ This is executed when run from the command line """
 
     # Example from the Skyfield docs
-    line1 = '1 25544U 98067A   14020.93268519  .00009878  00000-0  18200-3 0  5082'
-    line2 = '2 25544  51.6498 109.4756 0003572  55.9686 274.8005 15.49815350868473'
-    ts = load.timescale()
-    satellite = EarthSatellite(line1, line2, 'ISS (ZARYA)', ts)
-    t = ts.utc(2014, 1, 23, 11, 18, 7)
-    geocentric = satellite.at(t)
+    # line1 = '1 25544U 98067A   14020.93268519  .00009878  00000-0  18200-3 0  5082'
+    # line2 = '2 25544  51.6498 109.4756 0003572  55.9686 274.8005 15.49815350868473'
+    # ts = load.timescale()
+    # satellite = EarthSatellite(line1, line2, 'ISS (ZARYA)', ts)
+    # t = ts.utc(2014, 1, 23, 11, 18, 7)
+    # geocentric = satellite.at(t)
 
     # Example using Planet's SKYSAT-A satellite and custom class
     tle = """SKYSAT-A
@@ -75,14 +74,34 @@ if __name__ == "__main__":
     ts = load.timescale()
     s = Spacecraft([lines[1], lines[2]])
     satellite2 = EarthSatellite.from_satrec(s.satrec, ts)
-    t = ts.utc(2023, 3, 23, 18, 1)
-    geocentric2 = satellite2.at(t)
+    t = ts.utc(2023, 3, 23, 18, 1)  # define the time at which you want the position
+    geocentric2 = satellite2.at(t)  # get the ECI position at that time
     print(geocentric2.position.km)
     lat, lon = wgs84.latlon_of(geocentric2)
     print('Latitude:', lat)
     print('Longitude:', lon)
 
+    bluffton = wgs84.latlon(+40.8939, -83.8917)
+    t0 = ts.utc(2023, 3, 23)
+    t1 = ts.utc(2023, 3, 30)
+    t, events = satellite2.find_events(bluffton, t0, t1, altitude_degrees=30.0)
+    for ti, event in zip(t, events):
+        name = ('rise above 30°', 'culminate', 'set below 30°')[event]
+        print(ti.utc_strftime('%Y %b %d %H:%M:%S'), name)
+
     # Alternative that gives the sub-satellite point (same results as above)
     # lat_lon = wgs84.subpoint_of(geocentric2)
     # print('Latitude_:', lat_lon.latitude)
     # print('Longitude_:', lat_lon.longitude)
+
+    # EXAMPLE SIMPLY USING EARTHSATELLITE OBJECT DIRECTLY
+    planet_url = "http://celestrak.com/NORAD/elements/planet.txt"
+    satellites = load.tle_file(planet_url)
+    print("")
+
+    t = ts.utc(2023, 3, 23, 0, 0)
+    geocentric2 = satellites[0].at(t)  # get the ECI position at that time
+    print(geocentric2.position.km)
+    lat, lon = wgs84.latlon_of(geocentric2)
+    print('Latitude:', lat)
+    print('Longitude:', lon)
