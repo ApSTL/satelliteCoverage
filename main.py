@@ -11,42 +11,18 @@ from skyfield.api import wgs84, load, Time
 from skyfield.toposlib import GeographicPosition
 
 
-class Image:
-	"""Image base class"""
-
-	def __init__(
-			self, target: str, time_capture: Time, satellite: str, cloud: float = 0.
-	):
-		self.target = target
-		self.time = time_capture
-		self.satellite = satellite
-		self.cloud = cloud
-
-
-class Download:
-	"""Download event base class"""
-
-	def __init__(self, ground_station: str, start: Time, end: Time, satellite: str):
-		self.ground_station = ground_station
-		self.start = start
-		self.end = end
-		self.satellite = satellite
-
-	@property
-	def duration(self):
-		return 24 * 60 * 60 * (self.end - self.start)
-
-
 class Spacecraft:
 	def __init__(
 			self,
 			satellite: skyfield.api.EarthSatellite,
 			field_of_regard: float = radians(30),
-			aq_prob: float = 1.0
+			aq_prob: float = 1.0,
+			download_rate: float = 100.
 	):
 		self.satellite = satellite
 		self.for_ = field_of_regard
 		self.aq_prob = aq_prob
+		self.download_rate = download_rate
 
 
 class Location:
@@ -57,6 +33,44 @@ class Location:
 	):
 		self.name = name
 		self.location = location
+
+
+class Image:
+	"""Image base class"""
+	def __init__(
+			self,
+			satellite: Spacecraft,
+			target: Location,
+			time_capture: Time,
+			cloud: float = 0.
+	):
+		self.target = target
+		self.time = time_capture
+		self.satellite = satellite
+		self.cloud = cloud
+
+
+class Download:
+	"""Download event base class"""
+	def __init__(
+			self,
+			satellite: Spacecraft,
+			ground_station: Location,
+			start: Time,
+			end: Time
+	):
+		self.ground_station = ground_station
+		self.start = start
+		self.end = end
+		self.satellite = satellite
+
+	@property
+	def duration(self):
+		return 24 * 60 * 60 * (self.end - self.start)
+
+	@property
+	def capacity(self):
+		return self.duration * self.satellite.download_rate
 
 
 def for_elevation_from_half_angle(half_angle, altitude):
@@ -134,7 +148,7 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 							continue
 					# otherwise, we must be at a Peak event, so add to the events list
 					image_events[location.name].append(
-						Image(location.name, t_peak, s.satellite.name))
+						Image(s, location, t_peak))
 
 				elif location.name in [gs.name for gs in stations]:
 					# If the event is 0 (i.e. "rise"), store the rise event, else if it's
@@ -146,7 +160,7 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 						continue
 					# So long as a rise time has been defined, instantiate the Download event
 					download_events[location.name].append(
-						Download(location.name, t_rise, ti, s.satellite.name)
+						Download(s, location, t_rise, ti)
 					)
 
 				else:
