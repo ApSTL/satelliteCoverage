@@ -94,13 +94,12 @@ def for_elevation_from_half_angle(half_angle, altitude):
 
 def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 	"""
-	Return all contact (Rise & Set) events between a set of satellites and ground
-	locations
+	Return all contact events between a set of satellites and ground locations
 	:param sats: List of Spacecraft objects
-	:param targs: Dict of Target objects
-	:param stations:
-	:param t0:
-	:param t1:
+	:param targs: List of Location objects representing Imaging targets
+	:param stations: List of Location objects representing Ground Stations
+	:param t0: Time horizon start
+	:param t1: Time horizon end
 	:return:
 	"""
 	R_E = 6371000.8  # Mean Earth radius
