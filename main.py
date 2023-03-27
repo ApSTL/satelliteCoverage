@@ -3,6 +3,8 @@ Main run file to get image acquisition-delivery probabilities over specific loca
 given cloud coverage data and satellite position data
 """
 
+from math import acos, sin, cos, pi
+
 from skyfield.api import wgs84, load, Time
 
 
@@ -30,6 +32,25 @@ class Download:
 		return 24 * 60 * 60 * (self.end - self.start)
 
 
+def for_elevation_from_half_angle(half_angle, altitude):
+	# TODO Write tests for this
+	"""
+	Return the elevation above the horizon at the edge of the Field of Regard
+	:param half_angle: FoR half-angle (i.e. the angle, from Nadir, to edge of view) (rad)
+	:param altitude: Satellite altitude (m)
+	:return:
+	"""
+	R_E = 6371000.8  # Mean Earth radius
+
+	# Check that we don't have the entire Earth in view, if so, return 90 deg
+	lamda_0 = acos(R_E / (R_E + altitude))
+	rho = pi/2 - lamda_0
+	if half_angle >= rho:
+		return 0.0
+
+	return acos(sin(half_angle)/sin(rho))
+
+
 if __name__ == "__main__":
 	# Fetch the latest TLEs for all of Planet's satellites
 	planet_url = "http://celestrak.com/NORAD/elements/planet.txt"
@@ -39,6 +60,17 @@ if __name__ == "__main__":
 	# set times over a particular location on the ground. It's "epoch" is based on the
 	# TLE used to generate it
 	satellites = load.tle_file(planet_url)
+
+	platform_attribs = {
+		"for": {  # Field of regard (half-angle)
+			"FLOCK": 30.,
+			"SKYSAT": 40.
+		},
+		"acquisition_prob": {  # probability that imaging opportunity results in capture
+			"FLOCK": 1.,
+			"SKYSAT": 0.2
+		}
+	}
 
 	# Define the target location over which images are captured
 	targets = {
