@@ -3,9 +3,12 @@ Main run file to get image acquisition-delivery probabilities over specific loca
 given cloud coverage data and satellite position data
 """
 
-from math import acos, sin, cos, pi
+from math import acos, sin, pi, radians, degrees
 
+import skyfield.api
 from skyfield.api import wgs84, load, Time
+
+R_E = 6371000.8
 
 
 class Image:
@@ -30,6 +33,18 @@ class Download:
 	@property
 	def duration(self):
 		return 24 * 60 * 60 * (self.end - self.start)
+
+
+class Spacecraft:
+	def __init__(
+			self,
+			satellite: skyfield.api.EarthSatellite,
+			field_of_regard: float = radians(30),
+			aq_prob: float = 1.0
+	):
+		self.satellite = satellite
+		self.for_ = field_of_regard
+		self.aq_prob = aq_prob
 
 
 def for_elevation_from_half_angle(half_angle, altitude):
@@ -66,11 +81,25 @@ if __name__ == "__main__":
 			"FLOCK": 30.,
 			"SKYSAT": 40.
 		},
-		"acquisition_prob": {  # probability that imaging opportunity results in capture
+		"aq_prob": {  # probability that imaging opportunity results in capture
 			"FLOCK": 1.,
 			"SKYSAT": 0.2
 		}
 	}
+
+	satellites_ = []
+	for satellite in satellites:
+		satellites_.append(Spacecraft(
+			satellite,
+			radians([
+				platform_attribs["for"][x] for x in platform_attribs["for"]
+				if x in satellite.name
+			][0]),
+			[
+				platform_attribs["aq_prob"][x] for x in platform_attribs["aq_prob"]
+				if x in satellite.name
+			][0]
+		))
 
 	# Define the target location over which images are captured
 	targets = {
@@ -94,34 +123,38 @@ if __name__ == "__main__":
 	image_events = {target: [] for target in targets}
 	download_events = {gs: [] for gs in ground_stations}
 
-	for satellite in satellites:
-		for target, location in targets.items():
+	for s in satellites_:
+		t_rise = None
+		for name, location in {**targets, **ground_stations}.items():
 			# Get the rise, culmination and fall for all passes between this
 			# satellite:target pair during the time horizon
-			t, events = satellite.find_events(location, t0, t1, altitude_degrees=30.0)
+			t, events = s.satellite.find_events(
+				location,
+				t0,
+				t1,
+				altitude_degrees=for_elevation_from_half_angle(
+					s.for_, s.satellite.model.altp * R_E)
+			)
 			for ti, event in zip(t, events):
-				if event != 1:  # If this is NOT the "peak" of the pass
-					continue
-				image_events[target].append(
-					Image(target, ti, satellite.name)
-				)
-
-		t_rise = None
-		for gs, location in ground_stations.items():
-			t, events = satellite.find_events(location, t0, t1, altitude_degrees=10.0)
-			for ti, event in zip(t, events):
-				# If the event is 0 (i.e. "rise"), store the rise event, else if it's
-				# 0 (i.e. "culmination"), continue
-				if event == 0:
-					t_rise = ti
-					continue
-				if event == 1:
-					continue
-				if not isinstance(t_rise, Time):
-					continue
-				# So long as a rise time has been defined, instantiate the Download event
-				download_events[gs].append(
-					Download(gs, t_rise, ti, satellite.name)
-				)
+				if name in targets:
+					if event != 1:  # If this is NOT the "peak" of the pass
+						continue
+					image_events[name].append(
+						Image(name, ti, s.satellite.name)
+					)
+				elif name in ground_stations:
+					# If the event is 0 (i.e. "rise"), store the rise event, else if it's
+					# 0 (i.e. "culmination"), continue
+					if event == 0:
+						t_rise = ti
+						continue
+					if event == 1:
+						continue
+					if not isinstance(t_rise, Time):
+						continue
+					# So long as a rise time has been defined, instantiate the Download event
+					download_events[name].append(
+						Download(name, t_rise, ti, s.satellite.name)
+					)
 
 	print('')
