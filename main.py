@@ -50,7 +50,7 @@ class Image:
 		self.cloud = cloud
 
 	def __lt__(self, other):
-		if self.time <= other.time:
+		if self.time.J <= other.time.J:
 			return True
 		return False
 
@@ -78,9 +78,9 @@ class Download:
 		return self.duration * self.satellite.download_rate
 
 	def __lt__(self, other):
-		if self.start < other.start:
+		if self.start.J < other.start.J:
 			return True
-		if self.start == other.start and self.end < other.end:
+		if self.start.J == other.start.J and self.end.J < other.end.J:
 			return True
 		return False
 
@@ -97,7 +97,7 @@ def for_elevation_from_half_angle(half_angle, altitude):
 
 	# Check that we don't have the entire Earth in view, if so, return 90 deg
 	lamda_0 = acos(R_E / (R_E + altitude))
-	rho = pi / 2 - lamda_0
+	rho = (pi / 2) - lamda_0
 	if half_angle >= rho:
 		return 0.0
 
@@ -131,8 +131,8 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 				# FIXME using the perigee altitude here to get angle above the horizon
 				#  that results in a "contact", however this would not work if we're in
 				#  an elliptical orbit, since the elevation angle would change over time
-				altitude_degrees=for_elevation_from_half_angle(
-					s.for_, s.satellite.model.altp * R_E)
+				altitude_degrees=degrees(for_elevation_from_half_angle(
+					s.for_, s.satellite.model.altp * R_E))
 			)
 
 			# Pre-set the
@@ -230,6 +230,8 @@ if __name__ == "__main__":
 		))
 
 	images, downloads = get_all_events(satellites_, targets, ground_stations, t0, t1)
+	images = sorted(images)
+	downloads = sorted(downloads)
 
 	# For each image event, get the combined-CDF for delivery of the data product to the
 	# analyst before time t
