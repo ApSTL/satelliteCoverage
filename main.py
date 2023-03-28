@@ -49,6 +49,11 @@ class Image:
 		self.satellite = satellite
 		self.cloud = cloud
 
+	def __lt__(self, other):
+		if self.time <= other.time:
+			return True
+		return False
+
 
 class Download:
 	"""Download event base class"""
@@ -71,6 +76,13 @@ class Download:
 	@property
 	def capacity(self):
 		return self.duration * self.satellite.download_rate
+
+	def __lt__(self, other):
+		if self.start < other.start:
+			return True
+		if self.start == other.start and self.end < other.end:
+			return True
+		return False
 
 
 def for_elevation_from_half_angle(half_angle, altitude):
@@ -104,13 +116,8 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 	"""
 	R_E = 6371000.8  # Mean Earth radius
 
-	# Data store for image events. Each key corresponds to a particular target location
-	# (using their ID), and the value is an empty list that will get populated with
-	# discrete image events and their associated information
-	image_events = {target.name: [] for target in targs}
-
-	# Same for download events, relating to the Ground Stations
-	download_events = {gs.name: [] for gs in stations}
+	image_events = []
+	download_events = []
 
 	# For each satellite<>location pair, get all of the contact events during the horizon
 	for s in sats:
@@ -146,8 +153,7 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 						else:
 							continue
 					# otherwise, we must be at a Peak event, so add to the events list
-					image_events[location.name].append(
-						Image(s, location, t_peak))
+					image_events.append(Image(s, location, t_peak))
 
 				elif location.name in [gs.name for gs in stations]:
 					# If the event is 0 (i.e. "rise"), store the rise event, else if it's
@@ -158,9 +164,7 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 					if event == 1:  # if this is a Peak event, skip
 						continue
 					# So long as a rise time has been defined, instantiate the Download event
-					download_events[location.name].append(
-						Download(s, location, t_rise, ti)
-					)
+					download_events.append(Download(s, location, t_rise, ti))
 
 				else:
 					raise ValueError("Location not in either targets or ground stations")
@@ -226,5 +230,10 @@ if __name__ == "__main__":
 		))
 
 	images, downloads = get_all_events(satellites_, targets, ground_stations, t0, t1)
+
+	# For each image event, get the combined-CDF for delivery of the data product to the
+	# analyst before time t
+	for image in images:
+		pass
 
 	print('')
