@@ -174,6 +174,7 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 						else:
 							continue
 					# otherwise, we must be at a Peak event, so add to the events list
+					# TODO Add in cloud fraction
 					image_events.append(Image(s, location, t_peak))
 
 				elif location.name in [gs.name for gs in stations]:
@@ -229,9 +230,9 @@ def prob_arrival_via_download(t: Time, download: Download):
 	would have been delivered to the customer by time "t".
 	:return:
 	"""
-	if t <= download.end + T_MIN:
+	if t.tt <= (download.end + T_MIN).tt:
 		return 0.
-	elif t >= download.end + T_MAX:
+	elif t.tt >= (download.end + T_MAX).tt:
 		return 1.
 	# Replace this function with a different probability function if required.
 	return prob_distribution_data_arrival_linear(
@@ -241,7 +242,7 @@ def prob_arrival_via_download(t: Time, download: Download):
 	)
 
 
-def prob_of_data_by_time(image: Image, t_arrival: Time):
+def prob_of_data_by_time(image: Image, t_arrival: Time, downloads: List):
 	"""
 	Return probability that data from an image event has arrived at the customer.
 	:param image: Image object
@@ -255,21 +256,24 @@ def prob_of_data_by_time(image: Image, t_arrival: Time):
 	# This is the MAX probability that the data product arrives at the customer
 	prob_image_exists = (1. - image.cloud) * image.satellite.aq_prob
 
+	downloads_ = get_n_following_downloads(
+		image, downloads, NUM_DOWNLOADS_CONSIDERED)
+
 	# Initiate a variable that tracks the probability that data that WAS delivered would
 	# have arrived by this time. This does NOT consider the probability of it actually
 	# existing in the first place. E.g. if we're passed the max processing time for two
 	# download events, and we're only considering two download events feasible,
 	# then this would be 100%
 	total_prob_arr_via_download = 0
-	k = 1
-	for d in image.downloads:
+	k = 0
+	for d in downloads_:
 		prob_arrival_via_d = prob_arrival_via_download(t_arrival, d)
-		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[k] * prob_arrival_via_d
+		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[NUM_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
+		k += 1
 
 	# Combine the probability of the image existing and the probability of it having
 	# arrived IF it were downloaded, to get the overall probability of
 	return prob_image_exists * total_prob_arr_via_download
-
 
 
 if __name__ == "__main__":
@@ -334,10 +338,10 @@ if __name__ == "__main__":
 	images = sorted(images)
 	downloads = sorted(downloads)
 
-	# For each image event, get the combined-CDF for delivery of the data product to the
-	# analyst before time t
-	for image in images:
-		image.downloads = get_n_following_downloads(
-			image, downloads, NUM_DOWNLOADS_CONSIDERED)
+	prob = prob_of_data_by_time(
+		images[20],
+		load.timescale().utc(2023, 3, 25),
+		downloads
+	)
 
 	print('')
