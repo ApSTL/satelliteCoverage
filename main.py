@@ -11,6 +11,22 @@ from skyfield.api import wgs84, load, Time
 from skyfield.toposlib import GeographicPosition
 
 
+# Probability of downloading an image during the subsequent X ground station passes.
+# E.g. If only one pass is considered, then there's a 100% probability then that pass
+# is used. If two passes, then 75% chance the first is used, and 25% the second is used.
+DOWNLOAD_PROBABILITY = {
+	1: [1.0],
+	2: [0.75, 0.25],
+	3: [0.6, 0.3, 0.1],
+	4: [0.5, 0.25, 0.1, 0.05]
+}
+
+NUM_DOWNLOADS_CONSIDERED = 2
+
+T_MIN = 1800 / 86400  # Time (days) since download before which 0% chance of data arrival
+T_MAX = 7200 / 86400  # Time (days) since download after which 100% chance of data arrival
+
+
 class Spacecraft:
 	def __init__(
 			self,
@@ -48,7 +64,7 @@ class Image:
 		self.time = time_capture
 		self.satellite = satellite
 		self.cloud = cloud
-		self.download_opportunities = []
+		self.downloads = []
 
 	def __lt__(self, other):
 		if self.time.J <= other.time.J:
@@ -191,14 +207,76 @@ def get_n_following_downloads(image: Image, downloads: List, n: int = 1):
 			break
 		if download.end.tt > image.time.tt and download.satellite == image.satellite:
 			downloads_.append(download)
+	while len(downloads_) < n:
+		downloads_.append(None)
 	return downloads_
+
+
+def prob_distribution_data_arrival_linear(t, t_min, t_max):
+	"""
+	Linear probability function for an event happening between some minimum and maximum.
+	:param t:
+	:param t_min:
+	:param t_max:
+	:return:
+	"""
+	return 1 - (t_max - t) / (t_max - t_min)
+
+
+def prob_arrival_via_download(t: Time, download: Download):
+	"""
+	Probability that data, if it had been downloaded during this "download" event,
+	would have been delivered to the customer by time "t".
+	:return:
+	"""
+	if t <= download.end + T_MIN:
+		return 0.
+	elif t >= download.end + T_MAX:
+		return 1.
+	# Replace this function with a different probability function if required.
+	return prob_distribution_data_arrival_linear(
+		t,
+		download.end + T_MIN,
+		download.end + T_MAX
+	)
+
+
+def prob_of_data_by_time(image: Image, t_arrival: Time):
+	"""
+	Return probability that data from an image event has arrived at the customer.
+	:param image: Image object
+	:param t_arrival:
+	:return:
+	"""
+	# The probability that the image even exist in the first place is the
+	# combined probability that is was both taken AND it was cloud-free. E.g. if there
+	# was an 80% chance of acquisition, and a 30% chance of it being cloud-free,
+	# then the chance of image existing is 0.8 * 0.3 = 0.24.
+	# This is the MAX probability that the data product arrives at the customer
+	prob_image_exists = (1. - image.cloud) * image.satellite.aq_prob
+
+	# Initiate a variable that tracks the probability that data that WAS delivered would
+	# have arrived by this time. This does NOT consider the probability of it actually
+	# existing in the first place. E.g. if we're passed the max processing time for two
+	# download events, and we're only considering two download events feasible,
+	# then this would be 100%
+	total_prob_arr_via_download = 0
+	k = 1
+	for d in image.downloads:
+		prob_arrival_via_d = prob_arrival_via_download(t_arrival, d)
+		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[k] * prob_arrival_via_d
+
+	# Combine the probability of the image existing and the probability of it having
+	# arrived IF it were downloaded, to get the overall probability of
+	return prob_image_exists * total_prob_arr_via_download
+
 
 
 if __name__ == "__main__":
 	# Fetch the latest TLEs for all of Planet's satellites
 	planet_url = "http://celestrak.com/NORAD/elements/planet.txt"
 
-	# Instantiate an "skyfield.EarthSatellite" object for each of the TLE entries. This
+	# Instantiate a "skyfield.EarthSatellite" object for each of the TLE entries. This
 	# is a satellite object that has built-in functionality for such things as rise and
 	# set times over a particular location on the ground. It's "epoch" is based on the
 	# TLE used to generate it
@@ -237,6 +315,7 @@ if __name__ == "__main__":
 	t0 = load.timescale().utc(2023, 3, 24)
 	t1 = load.timescale().utc(2023, 3, 26)
 
+	# Create Spacecraft objects for each item in the TLE dataset
 	satellites_ = []
 	for satellite in satellites:
 		satellites_.append(Spacecraft(
@@ -257,9 +336,8 @@ if __name__ == "__main__":
 
 	# For each image event, get the combined-CDF for delivery of the data product to the
 	# analyst before time t
-
-	num_dl = 2
 	for image in images:
-		image.download_opportunities = get_n_following_downloads(image, downloads, num_dl)
+		image.downloads = get_n_following_downloads(
+			image, downloads, NUM_DOWNLOADS_CONSIDERED)
 
 	print('')
