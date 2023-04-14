@@ -48,6 +48,7 @@ class Image:
 		self.time = time_capture
 		self.satellite = satellite
 		self.cloud = cloud
+		self.download_opportunities = []
 
 	def __lt__(self, other):
 		if self.time.J <= other.time.J:
@@ -119,21 +120,25 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 	image_events = []
 	download_events = []
 
-	# For each satellite<>location pair, get all of the contact events during the horizon
+	# For each satellite<>location pair, get all contact events during the horizon
 	for s in sats:
 		for location in targs + stations:
-			# Get the rise, culmination and fall for all passes between this
-			# satellite:target pair during the time horizon
-			t, events = s.satellite.find_events(
-				location.location,
-				t0,
-				t1,
+
+			# Set the elevation angle above the horizon that defines "contact",
+			# depending on whether the location is a Target or Ground Station
+			if location in targs:
 				# FIXME using the perigee altitude here to get angle above the horizon
 				#  that results in a "contact", however this would not work if we're in
 				#  an elliptical orbit, since the elevation angle would change over time
-				altitude_degrees=degrees(for_elevation_from_half_angle(
+				elev_angle = degrees(for_elevation_from_half_angle(
 					s.for_, s.satellite.model.altp * R_E))
-			)
+			else:
+				elev_angle = 10
+
+			# Get the rise, culmination and fall for all passes between this
+			# satellite:target pair during the time horizon
+			t, events = s.satellite.find_events(
+				location.location, t0, t1, altitude_degrees=elev_angle)
 
 			# Pre-set the
 			t_rise = t0
@@ -170,6 +175,23 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 					raise ValueError("Location not in either targets or ground stations")
 
 	return image_events, download_events
+
+
+def get_n_following_downloads(image: Image, downloads: List, n: int = 1):
+	"""
+	Given a particular image event, find the n downloads that are available.
+	:param image:
+	:param downloads:
+	:param n:
+	:return:
+	"""
+	downloads_ = []  # List of download events available after image acquisition
+	for download in downloads:
+		if len(downloads_) == n:
+			break
+		if download.end.tt > image.time.tt and download.satellite == image.satellite:
+			downloads_.append(download)
+	return downloads_
 
 
 if __name__ == "__main__":
@@ -235,7 +257,9 @@ if __name__ == "__main__":
 
 	# For each image event, get the combined-CDF for delivery of the data product to the
 	# analyst before time t
+
+	num_dl = 2
 	for image in images:
-		pass
+		image.download_opportunities = get_n_following_downloads(image, downloads, num_dl)
 
 	print('')
