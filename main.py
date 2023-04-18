@@ -213,15 +213,13 @@ def get_n_following_downloads(image: Image, downloads: List, n: int = 1):
 	return downloads_
 
 
-def prob_distribution_data_arrival_linear(t, t_min, t_max):
+def probability_event_linear_scale(x, x_min, x_max):
 	"""
-	Linear probability function for an event happening between some minimum and maximum.
-	:param t:
-	:param t_min:
-	:param t_max:
+	Probability that an event has happened at some time between some min & max,
+	given a linear probability distribution between those limits
 	:return:
 	"""
-	return 1 - (t_max - t) / (t_max - t_min)
+	return (x - x_min) / (x_max - x_min)
 
 
 def prob_arrival_via_download(t: Time, download: Download):
@@ -235,7 +233,7 @@ def prob_arrival_via_download(t: Time, download: Download):
 	elif t.tt >= (download.end + T_MAX).tt:
 		return 1.
 	# Replace this function with a different probability function if required.
-	return prob_distribution_data_arrival_linear(
+	return probability_event_linear_scale(
 		t,
 		download.end + T_MIN,
 		download.end + T_MAX
