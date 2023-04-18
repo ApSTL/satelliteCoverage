@@ -21,7 +21,9 @@ DOWNLOAD_PROBABILITY = {
 	4: [0.5, 0.25, 0.1, 0.05]
 }
 
-NUM_DOWNLOADS_CONSIDERED = 2
+# The number of downloads considered reasonable before data acquired earlier is
+# guaranteed to have been downloaded.
+NUM_DOWNLOADS_CONSIDERED: int = 2
 
 T_MIN = 1800 / 86400  # Time (days) since download before which 0% chance of data arrival
 T_MAX = 7200 / 86400  # Time (days) since download after which 100% chance of data arrival
@@ -194,7 +196,7 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 	return image_events, download_events
 
 
-def get_n_following_downloads(image: Image, downloads: List, n: int = 1):
+def get_n_downloads_following_event(image: Image, downloads: List, n: int = 1):
 	"""
 	Given a particular image event, find the n downloads that are available.
 	:param image:
@@ -248,13 +250,13 @@ def prob_of_data_by_time(image: Image, t_arrival: Time, downloads: List):
 	:return:
 	"""
 	# The probability that the image even exist in the first place is the
-	# combined probability that is was both taken AND it was cloud-free. E.g. if there
+	# combined probability that it was both taken AND it was cloud-free. E.g. if there
 	# was an 80% chance of acquisition, and a 30% chance of it being cloud-free,
 	# then the chance of image existing is 0.8 * 0.3 = 0.24.
 	# This is the MAX probability that the data product arrives at the customer
 	prob_image_exists = (1. - image.cloud) * image.satellite.aq_prob
 
-	downloads_ = get_n_following_downloads(
+	downloads_ = get_n_downloads_following_event(
 		image, downloads, NUM_DOWNLOADS_CONSIDERED)
 
 	# Initiate a variable that tracks the probability that data that WAS delivered would
@@ -301,6 +303,21 @@ if __name__ == "__main__":
 		}
 	}
 
+	# Create Spacecraft objects for each item in the TLE dataset
+	satellites_ = []
+	for satellite in satellites:
+		satellites_.append(Spacecraft(
+			satellite,
+			[  # Field of regard (half angle, radians)
+				platform_attribs["for"][x] for x in platform_attribs["for"]
+				if x in satellite.name
+			][0],
+			[  # Probability a location within the FoR will be acquired
+				platform_attribs["aq_prob"][x] for x in platform_attribs["aq_prob"]
+				if x in satellite.name
+			][0]
+		))
+
 	# Define the target location over which images are captured
 	targets = [
 		Location("sbs", wgs84.latlon(55.863005, -4.243111)),
@@ -316,21 +333,6 @@ if __name__ == "__main__":
 	# Time horizon parameters, between which image capture and download events are found
 	t0 = load.timescale().utc(2023, 3, 24)
 	t1 = load.timescale().utc(2023, 3, 26)
-
-	# Create Spacecraft objects for each item in the TLE dataset
-	satellites_ = []
-	for satellite in satellites:
-		satellites_.append(Spacecraft(
-			satellite,
-			[  # Field of regard (half angle, radians)
-				platform_attribs["for"][x] for x in platform_attribs["for"]
-				if x in satellite.name
-			][0],
-			[  # Probability a location within the FoR will be acquired
-				platform_attribs["aq_prob"][x] for x in platform_attribs["aq_prob"]
-				if x in satellite.name
-			][0]
-		))
 
 	images, downloads = get_all_events(satellites_, targets, ground_stations, t0, t1)
 	images = sorted(images)
