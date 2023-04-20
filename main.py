@@ -3,6 +3,8 @@ Main run file to get image acquisition-delivery probabilities over specific loca
 given cloud coverage data and satellite position data
 """
 
+import csv
+from datetime import datetime
 from math import acos, sin, pi, radians, degrees
 from typing import List, Dict
 
@@ -102,6 +104,21 @@ class Download:
 		if self.start.J == other.start.J and self.end.J < other.end.J:
 			return True
 		return False
+
+
+def extract_cloud_data(city: str, start: datetime, end: datetime):
+	cloud_info = {}
+	with open(f"weather//{city}.csv", newline='') as csvfile:
+		city_weather = csv.reader(csvfile, quotechar='|')
+		for row in city_weather:
+			if city_weather.line_num == 1:
+				cloud_idx = row.index("clouds_all")
+				continue
+			time_ = datetime.fromisoformat(row[1][0:19])
+			if time_ < start or time_ > end:
+				continue
+			cloud_info[time_] = row[cloud_idx]
+	return
 
 
 def for_elevation_from_half_angle(half_angle, altitude):
@@ -333,6 +350,11 @@ if __name__ == "__main__":
 	# Time horizon parameters, between which image capture and download events are found
 	t0 = load.timescale().utc(2023, 3, 24)
 	t1 = load.timescale().utc(2023, 3, 26)
+
+	cities = ["denver"]
+	cloud_data = {}
+	for city in cities:
+		extract_cloud_data(city, datetime(2022, 6, 1), datetime(2022, 7, 1))
 
 	images, downloads = get_all_events(satellites_, targets, ground_stations, t0, t1)
 	images = sorted(images)
