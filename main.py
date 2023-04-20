@@ -12,6 +12,8 @@ import skyfield.api
 from skyfield.api import wgs84, load, Time
 from skyfield.toposlib import GeographicPosition
 
+from space_track_api_script import space_track_api_request
+
 
 # Probability of downloading an image during the subsequent X ground station passes.
 # E.g. If only one pass is considered, then there's a 100% probability then that pass
@@ -104,6 +106,17 @@ class Download:
 		if self.start.J == other.start.J and self.end.J < other.end.J:
 			return True
 		return False
+
+
+def load_3le_from_space_track(satnums, start_date, end_date):
+	"""
+	Returns all of the
+	:param satnums:
+	:param start_date:
+	:param end_date:
+	:return:
+	"""
+
 
 
 def extract_cloud_data(location: str, start: datetime, end: datetime):
@@ -310,7 +323,12 @@ if __name__ == "__main__":
 	# is a satellite object that has built-in functionality for such things as rise and
 	# set times over a particular location on the ground. It's "epoch" is based on the
 	# TLE used to generate it
-	satellites = load.tle_file(planet_url)
+	epoch_time = "2022-06-10"
+	end_time = "2022-06-15"
+	filename = "flock.txt"
+	space_track_api_request(epoch_time, end_time, [41956, 43119], filename)
+	# satellites = load.tle_file(planet_url)
+	satellites = load.tle_file(filename)
 
 	# Define the platform attributes that get assigned based on the TLE data. Note that
 	# the "keys" within each of the attributes correspond to the "name" attribute on
@@ -363,7 +381,7 @@ if __name__ == "__main__":
 	cities = ["denver"]
 	cloud_data = {}
 	for city in cities:
-		extract_cloud_data(city, datetime(2022, 6, 1), datetime(2022, 7, 1))
+		extract_cloud_data(city, datetime(2022, 6, 10), datetime(2022, 6, 15))
 
 	images, downloads = get_all_events(satellites_, targets, ground_stations, t0, t1)
 	images = sorted(images)

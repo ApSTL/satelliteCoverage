@@ -1,6 +1,7 @@
 ##
 ## SLTrack.py
 ## (c) 2019 Andrew Stokes  All Rights Reserved
+## Taken from https://www.space-track.org/documentation#howto-api_python
 ##
 ##
 ## Simple Python app to extract Starlink satellite history data from www.space-track.org into a spreadsheet
@@ -26,8 +27,6 @@
 
 import requests
 import configparser
-import xlsxwriter
-from datetime import datetime
 
 
 class MyError(Exception):
@@ -41,70 +40,27 @@ class MyError(Exception):
 uriBase = "https://www.space-track.org"
 requestLogin = "/ajaxauth/login"
 requestCmdAction = "/basicspacedata/query"
-# requestOMMStarlink1 = "/class/omm/NORAD_CAT_ID/"
-# requestOMMStarlink2 = "/orderby/EPOCH%20asc/format/json"
 
-# Parameters to derive apoapsis and periapsis from mean motion (see https://en.wikipedia.org/wiki/Mean_motion)
-
-# GM = 398600441800000.0
-# GM13 = GM ** (1.0/3.0)
-# MRAD = 6378.137
-# PI = 3.14159265358979
-# TPI86 = 2.0 * PI / 86400.0
-
-# ACTION REQUIRED FOR YOU:
-#=========================
-# Provide a config file in the same directory as this file, called SLTrack.ini, with this format (without the # signs)
-# [configuration]
-# username = XXX
-# password = YYY
-# output = ZZZ
-#
-# ... where XXX and YYY are your www.space-track.org credentials (https://www.space-track.org/auth/createAccount for free account)
-# ... and ZZZ is your Excel Output file - e.g. starlink-track.xlsx (note: make it an .xlsx file)
 
 # Use configparser package to pull in the ini file (pip install configparser)
 config = configparser.ConfigParser()
 config.read("./SLTrack.ini")
 configUsr = config.get("configuration", "username")
 configPwd = config.get("configuration", "password")
-# configOut = config.get("configuration", "output")
 siteCred = {'identity': configUsr, 'password': configPwd}
 
-# User xlsxwriter package to write the xlsx file (pip install xlsxwriter)
-# workbook = xlsxwriter.Workbook(configOut)
-# worksheet = workbook.add_worksheet()
-# z0_format = workbook.add_format({'num_format': '#,##0'})
-# z1_format = workbook.add_format({'num_format': '#,##0.0'})
-# z2_format = workbook.add_format({'num_format': '#,##0.00'})
-# z3_format = workbook.add_format({'num_format': '#,##0.000'})
-#
-# # write the headers on the spreadsheet
-# now = datetime.now()
-# nowStr = now.strftime("%m/%d/%Y %H:%M:%S")
-# worksheet.write('A1', 'Starlink data from' + uriBase + " on " + nowStr)
-# worksheet.write('A3','NORAD_CAT_ID')
-# worksheet.write('B3','SATNAME')
-# worksheet.write('C3','EPOCH')
-# worksheet.write('D3','Orb')
-# worksheet.write('E3','Inc')
-# worksheet.write('F3','Ecc')
-# worksheet.write('G3','MnM')
-# worksheet.write('H3','ApA')
-# worksheet.write('I3','PeA')
-# worksheet.write('J3','AvA')
-# worksheet.write('K3','LAN')
-# worksheet.write('L3','AgP')
-# worksheet.write('M3','MnA')
-# worksheet.write('N3','SMa')
-# worksheet.write('O3','T')
-# worksheet.write('P3','Vel')
-# wsline = 3
 
+def space_track_api_request(start, end, norad_ids, filename="3le.txt"):
+    """
+    Return Three line elements from SpaceTrack, using their API access.
 
-def space_track_api_request(start, end, norad_id):
-    request_ = f"/class/gp_history/NORAD_CAT_ID/{norad_id}/orderby/TLE_LINE1 " \
-                           f"ASC/EPOCH/{start}--{end}/format/3le"
+    :param start: [str] start date of TLE data, in the format "YYYY-MM-DD"
+    :param end:  [str] end date of TLE data, in the format "YYYY-MM-DD"
+    :param norad_ids: [list] List of NORAD IDs of the satellite
+    :return:
+    """
+    norad_ids_str = str(norad_ids).strip("[]").replace(" ", "")
+    request_ = f"/class/gp_history/NORAD_CAT_ID/{norad_ids_str}/orderby/TLE_LINE1 ASC/EPOCH/{start}--{end}/format/3le"
 
     # use requests package to drive the RESTful session with space-track.org
     with requests.Session() as session:
@@ -121,10 +77,17 @@ def space_track_api_request(start, end, norad_id):
         resp = session.get(uriBase + requestCmdAction + request_)
         if resp.status_code != 200:
             print(resp)
-            raise MyError(resp, "GET fail on request for Starlink satellites")
+            raise MyError(resp, "GET fail on request for satellites")
 
         # Write the retrieved TLE data to a text file
-        with open("planet_tle.txt", "w", newline="") as text_file:
+        with open(filename, "w", newline="") as text_file:
             text_file.write(resp.text)
 
+
 print("Completed session")
+
+
+if __name__ == "__main__":
+    start = "2023-03-01"
+    end = "2023-03-02"
+    name = "FLOCK"
