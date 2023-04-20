@@ -106,9 +106,18 @@ class Download:
 		return False
 
 
-def extract_cloud_data(city: str, start: datetime, end: datetime):
+def extract_cloud_data(location: str, start: datetime, end: datetime):
+	"""
+	Import cloud cover fraction data from CSV file (obtained from openweathermap) between
+	two dates, for a particular location.
+
+	:param location: [str] name of location of interest (must match the name of the csv)
+	:param start: [datetime.datetime] Time at which cloud data starts
+	:param end: [datetime.datetime] Time at which cloud data ends
+	:return: [Dict] {datetime: cloud fraction}
+	"""
 	cloud_info = {}
-	with open(f"weather//{city}.csv", newline='') as csvfile:
+	with open(f"weather//{location}.csv", newline='') as csvfile:
 		city_weather = csv.reader(csvfile, quotechar='|')
 		for row in city_weather:
 			if city_weather.line_num == 1:
