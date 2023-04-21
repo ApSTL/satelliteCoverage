@@ -4,7 +4,8 @@ given cloud coverage data and satellite position data
 """
 
 import csv
-from datetime import datetime
+from bisect import bisect
+from datetime import datetime, timedelta
 from math import acos, sin, pi, radians, degrees
 from typing import List, Dict
 
@@ -46,6 +47,10 @@ class Spacecraft:
 		self.aq_prob = aq_prob
 		self.download_rate = download_rate
 
+	def __repr__(self):
+		# FIXME this isn't correct...
+		return self.satellite.satellite.__str__()
+
 
 class Location:
 	def __init__(
@@ -64,7 +69,7 @@ class Image:
 			satellite: Spacecraft,
 			target: Location,
 			time_capture: Time,
-			cloud: float = 0.
+			cloud: float = 0.  # Fraction of cloud cover (0.8 = 80% overcast)
 	):
 		self.target = target
 		self.time = time_capture
@@ -108,17 +113,6 @@ class Download:
 		return False
 
 
-def load_3le_from_space_track(satnums, start_date, end_date):
-	"""
-	Returns all of the
-	:param satnums:
-	:param start_date:
-	:param end_date:
-	:return:
-	"""
-
-
-
 def extract_cloud_data(location: str, start: datetime, end: datetime):
 	"""
 	Import cloud cover fraction data from CSV file (obtained from openweathermap) between
@@ -127,7 +121,7 @@ def extract_cloud_data(location: str, start: datetime, end: datetime):
 	:param location: [str] name of location of interest (must match the name of the csv)
 	:param start: [datetime.datetime] Time at which cloud data starts
 	:param end: [datetime.datetime] Time at which cloud data ends
-	:return: [Dict] {datetime: cloud fraction}
+	:return: [Dict] {Julian Date: cloud fraction}
 	"""
 	cloud_info = {}
 	with open(f"weather//{location}.csv", newline='') as csvfile:
@@ -139,8 +133,9 @@ def extract_cloud_data(location: str, start: datetime, end: datetime):
 			time_ = datetime.fromisoformat(row[1][0:19])
 			if time_ < start or time_ > end:
 				continue
-			cloud_info[time_] = row[cloud_idx]
-	return
+			time_ts = load.timescale().utc(time_.year, time_.month, time_.day, time_.hour)
+			cloud_info[time_ts.tt] = int(row[cloud_idx])/100
+	return cloud_info
 
 
 def for_elevation_from_half_angle(half_angle, altitude):
@@ -162,7 +157,8 @@ def for_elevation_from_half_angle(half_angle, altitude):
 	return acos(sin(half_angle) / sin(rho))
 
 
-def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
+def get_all_events(
+		sats: List, targs: List, stations: List, t0: Time, t1: Time, clouds: Dict):
 	"""
 	Return all contact events between a set of satellites and ground locations
 	:param sats: List of Spacecraft objects
@@ -216,7 +212,8 @@ def get_all_events(sats: List, targs: List, stations: List, t0: Time, t1: Time):
 							continue
 					# otherwise, we must be at a Peak event, so add to the events list
 					# TODO Add in cloud fraction
-					image_events.append(Image(s, location, t_peak))
+					cloud_at_event = get_cloud_fraction_at_time(t_peak.tt, clouds)
+					image_events.append(Image(s, location, t_peak, cloud_at_event))
 
 				elif location.name in [gs.name for gs in stations]:
 					# If the event is 0 (i.e. "rise"), store the rise event, else if it's
@@ -315,21 +312,26 @@ def prob_of_data_by_time(image: Image, t_arrival: Time, downloads: List):
 	return prob_image_exists * total_prob_arr_via_download
 
 
+def get_cloud_fraction_at_time(t: float, clouds: Dict) -> float:
+	idx = bisect(list(clouds), t)
+	t0 = list(clouds)[idx]
+
+	# TODO what if t is > the largest time in clouds? It shouldn't ever be, but this
+	#  would fall over if it is
+	t1 = list(clouds)[idx+1]
+
+	# TODO extrapolate between t0 & t1 to get actual cloud cover
+	return clouds[t0]
+
+
 if __name__ == "__main__":
-	# Fetch the latest TLEs for all of Planet's satellites
-	planet_url = "http://celestrak.com/NORAD/elements/planet.txt"
+	# *** INPUTS ***
+	city = "denver"
+	day0 = datetime(2022, 6, 10, 20, 0, 0)  # Day and time (UTC) of analysis Epoch
+	pre_day0_period = 3  # Number of days prior to Day 0 that images are considered
+	platform = "flock"  # "skysat"
 
-	# Instantiate a "skyfield.EarthSatellite" object for each of the TLE entries. This
-	# is a satellite object that has built-in functionality for such things as rise and
-	# set times over a particular location on the ground. It's "epoch" is based on the
-	# TLE used to generate it
-	epoch_time = "2022-06-10"
-	end_time = "2022-06-15"
-	filename = "flock.txt"
-	space_track_api_request(epoch_time, end_time, [41956, 43119], filename)
-	# satellites = load.tle_file(planet_url)
-	satellites = load.tle_file(filename)
-
+	# *** GLOBAL ATTRIBUTES ***
 	# Define the platform attributes that get assigned based on the TLE data. Note that
 	# the "keys" within each of the attributes correspond to the "name" attribute on
 	# the Satrec object in the Skyfield EarthSatellite.satellite object. As in if
@@ -347,10 +349,42 @@ if __name__ == "__main__":
 		}
 	}
 
+	# Instantiate a "skyfield.EarthSatellite" object for each of the TLE entries. This
+	# is a satellite object that has built-in functionality for such things as rise and
+	# set times over a particular location on the ground. It's "epoch" is based on the
+	# TLE used to generate it
+	epoch_time = day0 - timedelta(pre_day0_period + 3)
+	epoch_time_str = str(epoch_time)[0:10]
+	end_time = str(day0)[0:10]
+	filename = f"{platform}.txt"
+
+	with open(f"{platform}_ids.txt", "r") as file_norads:
+		norad_ids = file_norads.read()
+	space_track_api_request(epoch_time_str, end_time, norad_ids, filename)
+	satellites_all_epochs = load.tle_file(filename)
+
+	# Build a dict of EarthSatellite objects, arranged by their NORAD ID and then by epoch
+	day0_ts = load.timescale().utc(
+		day0.year, day0.month, day0.day, day0.hour, day0.minute, day0.second)
+	epoch_ts = day0_ts - pre_day0_period
+
+	satellites_best_epoch = {}
+	for s in satellites_all_epochs:
+		# If our TLE epoch is greater than the time from which we're considering
+		# images to be "valuable", skip since we need something earlier
+		if s.epoch.tt > epoch_ts.tt:
+			continue
+		if s.model.satnum not in satellites_best_epoch:
+			satellites_best_epoch[s.model.satnum] = s
+			continue
+		# If this TLE is later than the one we currently have, overwrite it
+		if s.epoch.tt > satellites_best_epoch[s.model.satnum].epoch.tt:
+			satellites_best_epoch[s.model.satnum] = s
+
 	# Create Spacecraft objects for each item in the TLE dataset
-	satellites_ = []
-	for satellite in satellites:
-		satellites_.append(Spacecraft(
+	spacecraft_all = []
+	for satellite_id, satellite in satellites_best_epoch.items():
+		spacecraft_all.append(Spacecraft(
 			satellite,
 			[  # Field of regard (half angle, radians)
 				platform_attribs["for"][x] for x in platform_attribs["for"]
@@ -363,9 +397,10 @@ if __name__ == "__main__":
 		))
 
 	# Define the target location over which images are captured
+	# TODO Make this dynamic
 	targets = [
-		Location("sbs", wgs84.latlon(55.863005, -4.243111)),
-		Location("nyc", wgs84.latlon(40.749040, -73.985933))
+		Location("denver", wgs84.latlon(39.739236, -104.990251)),
+		# Location("nyc", wgs84.latlon(40.749040, -73.985933))
 	]
 
 	# Define the Ground Stations to which images are downloaded
@@ -375,18 +410,21 @@ if __name__ == "__main__":
 	]
 
 	# Time horizon parameters, between which image capture and download events are found
-	t0 = load.timescale().utc(2023, 3, 24)
-	t1 = load.timescale().utc(2023, 3, 26)
+	# t0 = load.timescale().utc(2023, 3, 24)
+	# t1 = load.timescale().utc(2023, 3, 26)
+	cloud_data = extract_cloud_data(city, epoch_time, day0)
 
-	cities = ["denver"]
-	cloud_data = {}
-	for city in cities:
-		extract_cloud_data(city, datetime(2022, 6, 10), datetime(2022, 6, 15))
-
-	images, downloads = get_all_events(satellites_, targets, ground_stations, t0, t1)
+	images, downloads = get_all_events(
+		spacecraft_all, targets, ground_stations, epoch_ts, day0_ts, cloud_data)
 	images = sorted(images)
 	downloads = sorted(downloads)
 
+	# TODO Make this give the prob of getting data for a particular city at different
+	#  levels of "recentness"
+	# Given a particular City, and a particular "Day 0", get the probability that a
+	# decision maker will have received useful (processed) data, with which a trading
+	# decision can be made. There should be a probability associated with images
+	# acquired during preceding days, rather than simply Day 0 imagery.
 	prob = prob_of_data_by_time(
 		images[20],
 		load.timescale().utc(2023, 3, 25),

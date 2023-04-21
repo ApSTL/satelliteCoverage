@@ -56,11 +56,11 @@ def space_track_api_request(start, end, norad_ids, filename="3le.txt"):
 
     :param start: [str] start date of TLE data, in the format "YYYY-MM-DD"
     :param end:  [str] end date of TLE data, in the format "YYYY-MM-DD"
-    :param norad_ids: [list] List of NORAD IDs of the satellite
+    :param norad_ids: [str] String containing the Norad IDs of satellites (comma-sep.)
     :return:
     """
-    norad_ids_str = str(norad_ids).strip("[]").replace(" ", "")
-    request_ = f"/class/gp_history/NORAD_CAT_ID/{norad_ids_str}/orderby/TLE_LINE1 ASC/EPOCH/{start}--{end}/format/3le"
+    # norad_ids = str(norad_ids).strip("[]").replace(" ", "")
+    request_ = f"/class/gp_history/NORAD_CAT_ID/{norad_ids}/orderby/TLE_LINE1 ASC/EPOCH/{start}--{end}/format/3le"
 
     # use requests package to drive the RESTful session with space-track.org
     with requests.Session() as session:
