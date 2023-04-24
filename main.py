@@ -62,53 +62,28 @@ class Location:
 		self.location = location
 
 
-class Image:
-	"""Image base class"""
+class Contact:
+	"""Space-to-Ground contact base class"""
 	def __init__(
 			self,
 			satellite: Spacecraft,
 			target: Location,
-			time_capture: Time,
-			cloud: float = 0.  # Fraction of cloud cover (0.8 = 80% overcast)
+			t_rise: Time,
+			t_peak: Time,
+			t_set: Time
 	):
+		self.satellite = satellite
 		self.target = target
-		self.time = time_capture
-		self.satellite = satellite
-		self.cloud = cloud
-		self.downloads = []
-
-	def __lt__(self, other):
-		if self.time.J <= other.time.J:
-			return True
-		return False
-
-
-class Download:
-	"""Download event base class"""
-	def __init__(
-			self,
-			satellite: Spacecraft,
-			ground_station: Location,
-			start: Time,
-			end: Time
-	):
-		self.ground_station = ground_station
-		self.start = start
-		self.end = end
-		self.satellite = satellite
+		self.t_rise = t_rise
+		self.t_peak = t_peak
+		self.t_set = t_set
 
 	@property
 	def duration(self):
-		return 24 * 60 * 60 * (self.end - self.start)
-
-	@property
-	def capacity(self):
-		return self.duration * self.satellite.download_rate
+		return 24 * 60 * 60 * (self.t_set - self.t_rise)
 
 	def __lt__(self, other):
-		if self.start.J < other.start.J:
-			return True
-		if self.start.J == other.start.J and self.end.J < other.end.J:
+		if self.t_peak.J <= other.t_peak.J:
 			return True
 		return False
 
@@ -157,8 +132,8 @@ def for_elevation_from_half_angle(half_angle, altitude):
 	return acos(sin(half_angle) / sin(rho))
 
 
-def get_all_events(
-		sats: List, targs: List, stations: List, t0: Time, t1: Time, clouds: Dict):
+def get_contact_events(
+		sats: List, targs: List, stations: List, t0: Time, t1: Time) -> List:
 	"""
 	Return all contact events between a set of satellites and ground locations
 	:param sats: List of Spacecraft objects
@@ -169,10 +144,7 @@ def get_all_events(
 	:return:
 	"""
 	R_E = 6371000.8  # Mean Earth radius
-
-	image_events = []
-	download_events = []
-
+	contacts = []
 	# For each satellite<>location pair, get all contact events during the horizon
 	for s in sats:
 		for location in targs + stations:
@@ -195,49 +167,22 @@ def get_all_events(
 
 			# Pre-set the
 			t_rise = t0
-			t_peak = None
+			t_peak = t0
 			for ti, event in zip(t, events):
-				if location.name in [t.name for t in targs]:
-					if event == 0:  # If this is a Rise event, skip
-						continue
-					elif event == 1:  # If this is a Peak event, set the peak time
-						t_peak = ti
-					else:  # if this is a Fall event
-						# If we haven't yet seen a peak, we must have started in a
-						# contact, but after the peak. In this case, set the peak time
-						# to be the start of our horizon, to get as close as possible
-						if t_peak is None:
-							t_peak = t0
-						else:
-							continue
-					# otherwise, we must be at a Peak event, so add to the events list
-					image_events.append(
-						Image(
-							s,
-							location,
-							t_peak,
-							get_cloud_fraction_at_time(t_peak.tt, clouds)
-						)
-					)
-
-				elif location.name in [gs.name for gs in stations]:
-					# If the event is 0 (i.e. "rise"), store the rise event, else if it's
-					# 0 (i.e. "culmination"), continue
-					if event == 0:  # If this is a Rise event, set the rise time
-						t_rise = ti
-						continue
-					if event == 1:  # if this is a Peak event, skip
-						continue
-					# So long as a rise time has been defined, instantiate the Download event
-					download_events.append(Download(s, location, t_rise, ti))
-
-				else:
-					raise ValueError("Location not in either targets or ground stations")
-
-	return image_events, download_events
+				# If the event is 0 (i.e. "rise"), store the rise event, else if it's
+				# 0 (i.e. "culmination"), continue
+				if event == 0:  # If this is a Rise event, set the rise time
+					t_rise = ti
+					continue
+				if event == 1:  # if this is a Peak event, skip
+					t_peak = ti
+					continue
+				# So long as a rise time has been defined, instantiate the Download event
+				contacts.append(Contact(s, location, t_rise, t_peak, ti))
+	return contacts
 
 
-def get_n_downloads_following_event(image: Image, downloads: List, n: int = 1):
+def get_n_downloads_following_event(image: Contact, downloads: List, n: int = 1):
 	"""
 	Given a particular image event, find the n downloads that are available.
 	:param image:
@@ -249,7 +194,7 @@ def get_n_downloads_following_event(image: Image, downloads: List, n: int = 1):
 	for download in downloads:
 		if len(downloads_) == n:
 			break
-		if download.end.tt > image.time.tt and download.satellite == image.satellite:
+		if download.end.tt > image.t_peak.tt and download.satellite == image.satellite:
 			downloads_.append(download)
 	while len(downloads_) < n:
 		downloads_.append(None)
@@ -265,7 +210,7 @@ def probability_event_linear_scale(x, x_min, x_max):
 	return (x - x_min) / (x_max - x_min)
 
 
-def prob_arrival_via_download(t: Time, download: Download):
+def prob_arrival_via_download(t: Time, download: Contact):
 	"""
 	Probability that data, if it had been downloaded during this "download" event,
 	would have been delivered to the customer by time "t".
@@ -284,9 +229,9 @@ def prob_arrival_via_download(t: Time, download: Download):
 
 
 def prob_of_data_by_time(
-		image: Image,
+		image: Contact,
 		t_arrival: Time,
-		downloads: List[Download],
+		downloads: List[Contact],
 ):
 	"""
 	Return probability that data from an image event has arrived at the customer.
@@ -435,10 +380,14 @@ if __name__ == "__main__":
 	# Get cloud data for the city of interest during our time horizon
 	cloud_data = extract_cloud_data(city, epoch_time, day0)
 
-	images, downloads = get_all_events(
-		spacecraft_all, targets, ground_stations, epoch_ts, day0_ts, cloud_data)
-	images = sorted(images)
-	downloads = sorted(downloads)
+	# Get all the potential contact opportunities. These might not necessarily be
+	# realised, because of things like cloud cover and/or time of day, but these are
+	# events in which the satellite is above the minimum elevation for the target
+	contacts = get_contact_events(
+		spacecraft_all, targets, ground_stations, epoch_ts, day0_ts)
+
+	images = sorted([c for c in contacts if c.target in targets])
+	downloads = sorted([c for c in contacts if c.target in ground_stations])
 
 	# Given a particular City, and a particular "Day 0", get the probability that a
 	# decision maker will have received useful (processed) data, with which a trading
@@ -447,7 +396,7 @@ if __name__ == "__main__":
 	cumulative_probability_of_no_image = 1.
 	for image in images:
 		# If the image is not captured during sunlight, skip
-		if 18 < image.time.gast < 6:
+		if 18 < image.t_peak.gast < 6:
 			continue
 		# If the image is deemed "too cloudy", skip
 		if image.cloud > cloud_threshold:
