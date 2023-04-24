@@ -383,8 +383,16 @@ def get_probability_of_no_image(
 	return cumulative_probability_of_no_image
 
 
-def find_city_location(city_name) -> wgs84.latlon:
-	filepath = "uscities_lat_lng.csv"
+def find_city_location(
+		city_name
+) -> wgs84.latlon:
+	"""
+	Return a location object (lat lon) for a named city (city must be in the CSV).
+
+	:param city_name: String of city for which the Lat Lon is required
+	:return:
+	"""
+	filepath = "lat_lon_data/uscities_lat_lng.csv"
 	with open(filepath, newline='') as csvfile:
 		city_location = csv.reader(csvfile, quotechar='|')
 		for row in city_location:
@@ -414,7 +422,7 @@ def main(
 
 	file_tle = f"tle_data//{platform}_tle_{epoch_time_str}_{end_time_str}.txt"
 	if not os.path.isfile(file_tle):  # Skip if we already have this data
-		file_norad = f"{platform}_ids.txt"
+		file_norad = f"norad_ids//{platform}_ids.txt"
 		fetch_satellite_tle_data(file_tle, file_norad, epoch_time_str, end_time_str)
 
 	# For each satellite platform, extract the EarthSatellite object with an epoch
@@ -474,11 +482,13 @@ def main(
 
 
 if __name__ == "__main__":
-	cities = ["Denver"]
+	cities = ["Denver"]  # NOTE: This must match the name of the city in the lat-lon CSV
 	day0 = datetime(2022, 6, 30, 20, 0, 0)
-	pre_day0 = 3
+	pre_day0 = 2
 
 	probabilities = {}
 	for city in cities:
 		probabilities[city] = main(city, day0, pre_day0)
-	print('complete')
+	print(f"Probability of receiving data less than {pre_day0} days old:")
+	for city, prob in probabilities.items():
+		print(f"-> {city}: {prob}")
