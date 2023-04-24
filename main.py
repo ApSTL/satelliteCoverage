@@ -322,46 +322,28 @@ def get_cloud_fraction_at_time(
 	return clouds[t0]
 
 
-def main(
-		city: str = "denver",
-		day0: datetime = datetime(2022, 6, 10, 20, 0, 0),
-		pre_day0_period: float = 1.0,
-		platform: str = "flock",  # "skysat"
-		cloud_threshold: float = 0.25  # maximum acceptable fraction of cloud cover
-) -> float:
+def fetch_satellite_tle_data(
+		filename_tle, filename_norad, epoch_time_str, end_time_str):
+	with open(filename_norad, "r") as file_norads:
+		norad_ids = file_norads.read()
 
-	# Define the date and time from which we want to extract TLE data. This should be
-	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
-	# of interest), considering that there can be gaps in TLE data of a couple of days.
-	epoch_time = day0 - timedelta(pre_day0_period + 3)  # epoch as a datetime object
-	epoch_time_str = str(epoch_time)[0:10]  # date component of epoch as a string
-	end_time = day0 + timedelta(1)  # end of time horizon (plus 1 day) as a datetime
-	end_time_str = str(end_time)[0:10]  # date component of the day 0, in a string format
-	day0_ts = load.timescale().utc(  # Day 0 as a Timescale object
-		day0.year, day0.month, day0.day, day0.hour, day0.minute, day0.second)
-	epoch_ts = day0_ts - pre_day0_period  # Epoch time as a Timescale object
+	# Get all TLE data for each satellite in the list between the start and end dates
+	tle_response = space_track_api_request(epoch_time_str, end_time_str, norad_ids)
 
-	filename = f"tle_data//{platform}_tle_{epoch_time_str}_{end_time_str}.txt"
+	# Write the retrieved TLE data to a text file
+	with open(filename_tle, "w", newline="") as text_file:
+		text_file.write(tle_response.text)
 
-	if not os.path.isfile(filename):  # Skip if we already have this data
-		with open(f"{platform}_ids.txt", "r") as file_norads:
-			norad_ids = file_norads.read()
 
-		# Get all TLE data for each satellite in the list between the start and end dates
-		tle_response = space_track_api_request(epoch_time_str, end_time_str, norad_ids)
-
-		# Write the retrieved TLE data to a text file
-		with open(filename, "w", newline="") as text_file:
-			text_file.write(tle_response.text)
-
-	# For each satellite platform, extract the EarthSatellite object with an epoch
-	# closest to (but no later than) the earliest time at which data is considered to be
-	# of value
+def get_satellites_closest_to_epoch(
+		file_with_tle_data,
+		epoch
+) -> Dict:
 	satellites_best_epoch = {}
-	for s in load.tle_file(filename):
+	for s in load.tle_file(file_with_tle_data):
 		# If our TLE epoch is greater than the time from which we're considering
 		# images to be "valuable", skip since we need something earlier
-		if s.epoch.tt > epoch_ts.tt:
+		if s.epoch.tt > epoch.tt:
 			continue
 		# If we've not yet stored a TLE for this satellite, do so
 		if s.model.satnum not in satellites_best_epoch:
@@ -370,51 +352,16 @@ def main(
 		# If this TLE is later than the one we currently have, overwrite it
 		if s.epoch.tt > satellites_best_epoch[s.model.satnum].epoch.tt:
 			satellites_best_epoch[s.model.satnum] = s
+	return satellites_best_epoch
 
-	# Create Spacecraft objects for each item in the TLE dataset
-	spacecraft_all = []
-	for satellite_id, satellite in satellites_best_epoch.items():
-		spacecraft_all.append(Spacecraft(
-			satellite,
-			[  # Field of regard (half angle, radians)
-				PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
-				if x in satellite.name
-			][0],
-			[  # Probability a location within the FoR will be acquired
-				PLATFORM_ATTRIBS["aq_prob"][x] for x in PLATFORM_ATTRIBS["aq_prob"]
-				if x in satellite.name
-			][0]
-		))
 
-	# Define the target location over which images are captured
-	# TODO Make this dynamic
-	targets = [
-		Location("denver", wgs84.latlon(39.739236, -104.990251)),
-		Location("nyc", wgs84.latlon(40.749040, -73.985933))
-	]
-
-	# Define the Ground Stations to which images are downloaded
-	ground_stations = [
-		Location("North Pole", wgs84.latlon(90.0, 0.0)),
-		Location("South Pole", wgs84.latlon(-90.0, 0.0))
-	]
-
-	# Get cloud data for the city of interest during our time horizon
-	cloud_data = extract_cloud_data(city, epoch_time, day0)
-
-	# Get all the potential contact opportunities. These might not necessarily be
-	# realised, because of things like cloud cover and/or time of day, but these are
-	# events in which the satellite is above the minimum elevation for the target
-	contacts = get_contact_events(
-		spacecraft_all, targets, ground_stations, epoch_ts, day0_ts)
-
-	images = sorted([c for c in contacts if c.target in targets])
-	downloads = sorted([c for c in contacts if c.target in ground_stations])
-
-	# Given a particular City, and a particular "Day 0", get the probability that a
-	# decision maker will have received useful (processed) data, with which a trading
-	# decision can be made. There should be a probability associated with images
-	# acquired during preceding days, rather than simply Day 0 imagery.
+def get_probability_of_no_image(
+		images,
+		downloads,
+		cloud_data,
+		cloud_threshold,
+		day0_ts
+) -> float:
 	cumulative_probability_of_no_image = 1.
 	for image in images:
 		cloud_fraction = get_cloud_fraction_at_time(image.t_peak.tt, cloud_data)
@@ -433,16 +380,104 @@ def main(
 		)
 		# Update probability that we'd have received NO image by this time
 		cumulative_probability_of_no_image *= 1 - prob
+	return cumulative_probability_of_no_image
+
+
+def find_city_location(city_name) -> wgs84.latlon:
+	filepath = "uscities_lat_lng.csv"
+	with open(filepath, newline='') as csvfile:
+		city_location = csv.reader(csvfile, quotechar='|')
+		for row in city_location:
+			if row[0] == city_name:
+				return wgs84.latlon(float(row[2]), float(row[3]))
+	raise ValueError(f"City {city_name} not found in the file")
+
+
+def main(
+		city: str = "Denver",
+		day0: datetime = datetime(2022, 6, 10, 20, 0, 0),
+		pre_day0_period: float = 1.0,
+		platform: str = "flock",  # "skysat"
+		cloud_threshold: float = 0.25  # maximum acceptable fraction of cloud cover
+) -> float:
+
+	# Define the date and time from which we want to extract TLE data. This should be
+	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
+	# of interest), considering that there can be gaps in TLE data of a couple of days.
+	epoch_time = day0 - timedelta(pre_day0_period + 3)  # epoch as a datetime object
+	epoch_time_str = str(epoch_time)[0:10]  # date component of epoch as a string
+	end_time = day0 + timedelta(1)  # end of time horizon (plus 1 day) as a datetime
+	end_time_str = str(end_time)[0:10]  # date component of the day 0, in a string format
+	day0_ts = load.timescale().utc(  # Day 0 as a Timescale object
+		day0.year, day0.month, day0.day, day0.hour, day0.minute, day0.second)
+	epoch_ts = day0_ts - pre_day0_period  # Epoch time as a Timescale object
+
+	file_tle = f"tle_data//{platform}_tle_{epoch_time_str}_{end_time_str}.txt"
+	if not os.path.isfile(file_tle):  # Skip if we already have this data
+		file_norad = f"{platform}_ids.txt"
+		fetch_satellite_tle_data(file_tle, file_norad, epoch_time_str, end_time_str)
+
+	# For each satellite platform, extract the EarthSatellite object with an epoch
+	# closest to (but no later than) the earliest time at which data is considered to be
+	# of value
+	satellites_best_epoch = get_satellites_closest_to_epoch(file_tle, epoch_ts)
+
+	# Create Spacecraft objects for each item in the TLE dataset
+	spacecraft_all = []
+	for satellite_id, satellite in satellites_best_epoch.items():
+		spacecraft_all.append(Spacecraft(
+			satellite,
+			[  # Field of regard (half angle, radians)
+				PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
+				if x in satellite.name
+			][0],
+			[  # Probability a location within the FoR will be acquired
+				PLATFORM_ATTRIBS["aq_prob"][x] for x in PLATFORM_ATTRIBS["aq_prob"]
+				if x in satellite.name
+			][0]
+		))
+
+	city_location = Location(city, find_city_location(city))
+
+	# Define the Ground Stations to which images are downloaded
+	ground_stations = [
+		Location("North Pole", wgs84.latlon(90.0, 0.0)),
+		Location("South Pole", wgs84.latlon(-90.0, 0.0))
+	]
+
+	# Get cloud data for the city of interest during our time horizon
+	cloud_data = extract_cloud_data(city, epoch_time, day0)
+
+	# Get all the potential contact opportunities. These might not necessarily be
+	# realised, because of things like cloud cover and/or time of day, but these are
+	# events in which the satellite is above the minimum elevation for the target
+	contacts = get_contact_events(
+		spacecraft_all, [city_location], ground_stations, epoch_ts, day0_ts)
+
+	images = sorted([c for c in contacts if c.target.name == city])
+	downloads = sorted([c for c in contacts if c.target in ground_stations])
+
+	# Given a particular City, and a particular "Day 0", get the probability that a
+	# decision maker will have received useful (processed) data, with which a trading
+	# decision can be made. There should be a probability associated with images
+	# acquired during preceding days, rather than simply Day 0 imagery.
+	no_image = get_probability_of_no_image(
+		images,
+		downloads,
+		cloud_data,
+		cloud_threshold,
+		day0_ts
+	)
 
 	# Get the TOTAL probability of having data insights of this target, but this time
-	return 1 - cumulative_probability_of_no_image
+	return 1 - no_image
 
 
 if __name__ == "__main__":
-	cities = ["denver"]
+	cities = ["Denver"]
 	day0 = datetime(2022, 6, 30, 20, 0, 0)
 	pre_day0 = 3
-	
+
 	probabilities = {}
 	for city in cities:
 		probabilities[city] = main(city, day0, pre_day0)
