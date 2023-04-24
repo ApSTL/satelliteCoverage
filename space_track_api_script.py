@@ -50,7 +50,7 @@ configPwd = config.get("configuration", "password")
 siteCred = {'identity': configUsr, 'password': configPwd}
 
 
-def space_track_api_request(start, end, norad_ids, filename="3le.txt"):
+def space_track_api_request(start, end, norad_ids):
     """
     Return Three line elements from SpaceTrack, using their API access.
 
@@ -79,9 +79,7 @@ def space_track_api_request(start, end, norad_ids, filename="3le.txt"):
             print(resp)
             raise MyError(resp, "GET fail on request for satellites")
 
-        # Write the retrieved TLE data to a text file
-        with open(filename, "w", newline="") as text_file:
-            text_file.write(resp.text)
+        return resp
 
 
 print("Completed session")

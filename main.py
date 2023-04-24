@@ -30,8 +30,8 @@ DOWNLOAD_PROBABILITY = {
 # guaranteed to have been downloaded.
 NUM_DOWNLOADS_CONSIDERED: int = 2
 
-T_MIN = 1800 / 86400  # Time (days) since download before which 0% chance of data arrival
-T_MAX = 7200 / 86400  # Time (days) since download after which 100% chance of data arrival
+T_MIN = 1 / 24  # Time (days) since download before which 0% chance of data arrival
+T_MAX = 6 / 24  # Time (days) since download after which 100% chance of data arrival
 
 
 class Spacecraft:
@@ -211,9 +211,14 @@ def get_all_events(
 						else:
 							continue
 					# otherwise, we must be at a Peak event, so add to the events list
-					# TODO Add in cloud fraction
-					cloud_at_event = get_cloud_fraction_at_time(t_peak.tt, clouds)
-					image_events.append(Image(s, location, t_peak, cloud_at_event))
+					image_events.append(
+						Image(
+							s,
+							location,
+							t_peak,
+							get_cloud_fraction_at_time(t_peak.tt, clouds)
+						)
+					)
 
 				elif location.name in [gs.name for gs in stations]:
 					# If the event is 0 (i.e. "rise"), store the rise event, else if it's
@@ -278,11 +283,17 @@ def prob_arrival_via_download(t: Time, download: Download):
 	)
 
 
-def prob_of_data_by_time(image: Image, t_arrival: Time, downloads: List):
+def prob_of_data_by_time(
+		image: Image,
+		t_arrival: Time,
+		downloads: List[Download],
+):
 	"""
 	Return probability that data from an image event has arrived at the customer.
 	:param image: Image object
 	:param t_arrival:
+	:param downloads: List of Download objects
+	:param times:
 	:return:
 	"""
 	# The probability that the image even exist in the first place is the
@@ -328,8 +339,9 @@ if __name__ == "__main__":
 	# *** INPUTS ***
 	city = "denver"
 	day0 = datetime(2022, 6, 10, 20, 0, 0)  # Day and time (UTC) of analysis Epoch
-	pre_day0_period = 3  # Number of days prior to Day 0 that images are considered
+	pre_day0_period = 1  # Number of days prior to Day 0 that images are considered
 	platform = "flock"  # "skysat"
+	cloud_threshold = 0.25  # fraction of cover, above which images are not considered
 
 	# *** GLOBAL ATTRIBUTES ***
 	# Define the platform attributes that get assigned based on the TLE data. Note that
@@ -339,41 +351,52 @@ if __name__ == "__main__":
 	platform_attribs = {
 		"for": {  # Field of regard (half-angle)
 			# TODO Update to be realistic
-			"FLOCK": radians(30.),
-			"SKYSAT": radians(40.)
+			"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
+			"SKYSAT": radians(30.)
 		},
 		"aq_prob": {  # probability that imaging opportunity results in capture
 			# TODO Update to be realistic
-			"FLOCK": 1.,
+			"FLOCK": 1.0,
 			"SKYSAT": 0.2
 		}
 	}
 
-	# Instantiate a "skyfield.EarthSatellite" object for each of the TLE entries. This
-	# is a satellite object that has built-in functionality for such things as rise and
-	# set times over a particular location on the ground. It's "epoch" is based on the
-	# TLE used to generate it
-	epoch_time = day0 - timedelta(pre_day0_period + 3)
+	# Define the date and time from which we want to extract TLE data. This should be
+	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
+	# of interest), considering that there can be gaps in TLE data of a couple of days.
+	epoch_time = day0 - timedelta(pre_day0_period + 3)  # datetime object
 	epoch_time_str = str(epoch_time)[0:10]
-	end_time = str(day0)[0:10]
+	end_time = day0 + timedelta(1)
+	end_time_str = str(end_time)[0:10]  # date component of the day 0, in a string format
 	filename = f"{platform}.txt"
 
 	with open(f"{platform}_ids.txt", "r") as file_norads:
 		norad_ids = file_norads.read()
-	space_track_api_request(epoch_time_str, end_time, norad_ids, filename)
-	satellites_all_epochs = load.tle_file(filename)
+
+	# Get all TLE data for each satellite in the list between the start and end dates
+	tle_response = space_track_api_request(epoch_time_str, end_time_str, norad_ids)
+
+	# Write the retrieved TLE data to a text file
+	with open(filename, "w", newline="") as text_file:
+		text_file.write(tle_response.text)
 
 	# Build a dict of EarthSatellite objects, arranged by their NORAD ID and then by epoch
+	satellites_all_epochs = load.tle_file(filename)
+
 	day0_ts = load.timescale().utc(
 		day0.year, day0.month, day0.day, day0.hour, day0.minute, day0.second)
 	epoch_ts = day0_ts - pre_day0_period
 
+	# For each satellite platform, extract the EarthSatellite object with an epoch
+	# closest to (but earlier than) the earliest time at which data can be considered
+	# of value
 	satellites_best_epoch = {}
 	for s in satellites_all_epochs:
 		# If our TLE epoch is greater than the time from which we're considering
 		# images to be "valuable", skip since we need something earlier
 		if s.epoch.tt > epoch_ts.tt:
 			continue
+		# If we've not yet stored a TLE for this satellite, do so
 		if s.model.satnum not in satellites_best_epoch:
 			satellites_best_epoch[s.model.satnum] = s
 			continue
@@ -409,9 +432,7 @@ if __name__ == "__main__":
 		Location("South Pole", wgs84.latlon(-90.0, 0.0))
 	]
 
-	# Time horizon parameters, between which image capture and download events are found
-	# t0 = load.timescale().utc(2023, 3, 24)
-	# t1 = load.timescale().utc(2023, 3, 26)
+	# Get cloud data for the city of interest during our time horizon
 	cloud_data = extract_cloud_data(city, epoch_time, day0)
 
 	images, downloads = get_all_events(
@@ -419,16 +440,27 @@ if __name__ == "__main__":
 	images = sorted(images)
 	downloads = sorted(downloads)
 
-	# TODO Make this give the prob of getting data for a particular city at different
-	#  levels of "recentness"
 	# Given a particular City, and a particular "Day 0", get the probability that a
 	# decision maker will have received useful (processed) data, with which a trading
 	# decision can be made. There should be a probability associated with images
 	# acquired during preceding days, rather than simply Day 0 imagery.
-	prob = prob_of_data_by_time(
-		images[20],
-		load.timescale().utc(2023, 3, 25),
-		downloads
-	)
+	cumulative_probability_of_no_image = 1.
+	for image in images:
+		# If the image is not captured during sunlight, skip
+		if 18 < image.time.gast < 6:
+			continue
+		# If the image is deemed "too cloudy", skip
+		if image.cloud > cloud_threshold:
+			continue
+		# Get the probability that the user will have data from this image by day0
+		prob = prob_of_data_by_time(
+			image,
+			day0_ts,
+			downloads,
+		)
+		# Update probability that we'd have received NO image by this time
+		cumulative_probability_of_no_image *= 1 - prob
+	# Get the TOTAL probability of having data insights of this target, but this time
+	total_probability_of_good_data = 1 - cumulative_probability_of_no_image
 
 	print('')
