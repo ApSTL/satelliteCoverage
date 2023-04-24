@@ -33,6 +33,19 @@ NUM_DOWNLOADS_CONSIDERED: int = 2
 T_MIN = 1 / 24  # Time (days) since download before which 0% chance of data arrival
 T_MAX = 6 / 24  # Time (days) since download after which 100% chance of data arrival
 
+PLATFORM_ATTRIBS = {
+		"for": {  # Field of regard (half-angle)
+			"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
+			# TODO Update to be realistic
+			"SKYSAT": radians(30.)
+		},
+		"aq_prob": {  # probability that imaging opportunity results in capture
+			# TODO Update to be realistic
+			"FLOCK": 1.0,
+			"SKYSAT": 0.2
+		}
+	}
+
 
 class Spacecraft:
 	def __init__(
@@ -194,7 +207,7 @@ def get_n_downloads_following_event(image: Contact, downloads: List, n: int = 1)
 	for download in downloads:
 		if len(downloads_) == n:
 			break
-		if download.end.tt > image.t_peak.tt and download.satellite == image.satellite:
+		if download.t_set.tt > image.t_peak.tt and download.satellite == image.satellite:
 			downloads_.append(download)
 	while len(downloads_) < n:
 		downloads_.append(None)
@@ -216,15 +229,15 @@ def prob_arrival_via_download(t: Time, download: Contact):
 	would have been delivered to the customer by time "t".
 	:return:
 	"""
-	if t.tt <= (download.end + T_MIN).tt:
+	if t.tt <= (download.t_set + T_MIN).tt:
 		return 0.
-	elif t.tt >= (download.end + T_MAX).tt:
+	elif t.tt >= (download.t_set + T_MAX).tt:
 		return 1.
 	# Replace this function with a different probability function if required.
 	return probability_event_linear_scale(
 		t,
-		download.end + T_MIN,
-		download.end + T_MAX
+		download.t_set + T_MIN,
+		download.t_set + T_MAX
 	)
 
 
@@ -232,13 +245,14 @@ def prob_of_data_by_time(
 		image: Contact,
 		t_arrival: Time,
 		downloads: List[Contact],
+		cloud: float,
 ):
 	"""
-	Return probability that data from an image event has arrived at the customer.
+	Return probability that cloud-free data from an image event has arrived
 	:param image: Image object
 	:param t_arrival:
 	:param downloads: List of Download objects
-	:param times:
+	:param cloud: fraction of cloud cover at time of image
 	:return:
 	"""
 	# The probability that the image even exist in the first place is the
@@ -246,7 +260,7 @@ def prob_of_data_by_time(
 	# was an 80% chance of acquisition, and a 30% chance of it being cloud-free,
 	# then the chance of image existing is 0.8 * 0.3 = 0.24.
 	# This is the MAX probability that the data product arrives at the customer
-	prob_image_exists = (1. - image.cloud) * image.satellite.aq_prob
+	prob_image_exists = (1. - cloud) * image.satellite.aq_prob
 
 	downloads_ = get_n_downloads_following_event(
 		image, downloads, NUM_DOWNLOADS_CONSIDERED)
@@ -280,31 +294,13 @@ def get_cloud_fraction_at_time(t: float, clouds: Dict) -> float:
 	return clouds[t0]
 
 
-if __name__ == "__main__":
-	# *** INPUTS ***
-	city = "denver"
-	day0 = datetime(2022, 6, 10, 20, 0, 0)  # Day and time (UTC) of analysis Epoch
-	pre_day0_period = 1  # Number of days prior to Day 0 that images are considered
-	platform = "flock"  # "skysat"
-	cloud_threshold = 0.25  # fraction of cover, above which images are not considered
-
-	# *** GLOBAL ATTRIBUTES ***
-	# Define the platform attributes that get assigned based on the TLE data. Note that
-	# the "keys" within each of the attributes correspond to the "name" attribute on
-	# the Satrec object in the Skyfield EarthSatellite.satellite object. As in if
-	# "FLOCK" is in the name attribute, it will be used.
-	platform_attribs = {
-		"for": {  # Field of regard (half-angle)
-			# TODO Update to be realistic
-			"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
-			"SKYSAT": radians(30.)
-		},
-		"aq_prob": {  # probability that imaging opportunity results in capture
-			# TODO Update to be realistic
-			"FLOCK": 1.0,
-			"SKYSAT": 0.2
-		}
-	}
+def main(
+		city: str = "denver",
+		day0: datetime = datetime(2022, 6, 10, 20, 0, 0),
+		pre_day0_period: float = 1.0,
+		platform: str = "flock",  # "skysat"
+		cloud_threshold: float = 0.25  # maximum acceptable fraction of cloud cover
+) -> float:
 
 	# Define the date and time from which we want to extract TLE data. This should be
 	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
@@ -355,11 +351,11 @@ if __name__ == "__main__":
 		spacecraft_all.append(Spacecraft(
 			satellite,
 			[  # Field of regard (half angle, radians)
-				platform_attribs["for"][x] for x in platform_attribs["for"]
+				PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
 				if x in satellite.name
 			][0],
 			[  # Probability a location within the FoR will be acquired
-				platform_attribs["aq_prob"][x] for x in platform_attribs["aq_prob"]
+				PLATFORM_ATTRIBS["aq_prob"][x] for x in PLATFORM_ATTRIBS["aq_prob"]
 				if x in satellite.name
 			][0]
 		))
@@ -368,7 +364,7 @@ if __name__ == "__main__":
 	# TODO Make this dynamic
 	targets = [
 		Location("denver", wgs84.latlon(39.739236, -104.990251)),
-		# Location("nyc", wgs84.latlon(40.749040, -73.985933))
+		Location("nyc", wgs84.latlon(40.749040, -73.985933))
 	]
 
 	# Define the Ground Stations to which images are downloaded
@@ -395,21 +391,31 @@ if __name__ == "__main__":
 	# acquired during preceding days, rather than simply Day 0 imagery.
 	cumulative_probability_of_no_image = 1.
 	for image in images:
+		cloud_fraction = get_cloud_fraction_at_time(image.t_peak.tt, cloud_data)
 		# If the image is not captured during sunlight, skip
 		if 18 < image.t_peak.gast < 6:
 			continue
 		# If the image is deemed "too cloudy", skip
-		if image.cloud > cloud_threshold:
+		if cloud_fraction > cloud_threshold:
 			continue
 		# Get the probability that the user will have data from this image by day0
 		prob = prob_of_data_by_time(
 			image,
 			day0_ts,
 			downloads,
+			cloud_fraction
 		)
 		# Update probability that we'd have received NO image by this time
 		cumulative_probability_of_no_image *= 1 - prob
-	# Get the TOTAL probability of having data insights of this target, but this time
-	total_probability_of_good_data = 1 - cumulative_probability_of_no_image
 
-	print('')
+	# Get the TOTAL probability of having data insights of this target, but this time
+	return 1 - cumulative_probability_of_no_image
+
+
+if __name__ == "__main__":
+	cities = ["denver"]
+	day0 = datetime(2022, 6, 30, 20, 0, 0)
+	probabilities = {}
+	for city in cities:
+		probabilities[city] = main(city, day0, 3)
+	print('complete')
