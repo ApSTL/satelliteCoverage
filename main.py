@@ -3,6 +3,7 @@ Main run file to get image acquisition-delivery probabilities over specific loca
 given cloud coverage data and satellite position data
 """
 
+import os
 import csv
 from bisect import bisect
 from datetime import datetime, timedelta
@@ -101,7 +102,11 @@ class Contact:
 		return False
 
 
-def extract_cloud_data(location: str, start: datetime, end: datetime):
+def extract_cloud_data(
+		location: str,
+		start: datetime,
+		end: datetime
+) -> Dict:
 	"""
 	Import cloud cover fraction data from CSV file (obtained from openweathermap) between
 	two dates, for a particular location.
@@ -112,7 +117,8 @@ def extract_cloud_data(location: str, start: datetime, end: datetime):
 	:return: [Dict] {Julian Date: cloud fraction}
 	"""
 	cloud_info = {}
-	with open(f"weather//{location}.csv", newline='') as csvfile:
+	filepath = f"weather//{location}.csv"
+	with open(filepath, newline='') as csvfile:
 		city_weather = csv.reader(csvfile, quotechar='|')
 		for row in city_weather:
 			if city_weather.line_num == 1:
@@ -126,7 +132,10 @@ def extract_cloud_data(location: str, start: datetime, end: datetime):
 	return cloud_info
 
 
-def for_elevation_from_half_angle(half_angle, altitude):
+def for_elevation_from_half_angle(
+		half_angle,
+		altitude
+) -> float:
 	# TODO Write tests for this
 	"""
 	Return the elevation above the horizon at the edge of the Field of Regard
@@ -146,7 +155,12 @@ def for_elevation_from_half_angle(half_angle, altitude):
 
 
 def get_contact_events(
-		sats: List, targs: List, stations: List, t0: Time, t1: Time) -> List:
+		sats: List,
+		targs: List,
+		stations: List,
+		t0: Time,
+		t1: Time
+) -> List:
 	"""
 	Return all contact events between a set of satellites and ground locations
 	:param sats: List of Spacecraft objects
@@ -195,7 +209,11 @@ def get_contact_events(
 	return contacts
 
 
-def get_n_downloads_following_event(image: Contact, downloads: List, n: int = 1):
+def get_n_downloads_following_event(
+		image: Contact,
+		downloads: List,
+		n: int = 1
+) -> List:
 	"""
 	Given a particular image event, find the n downloads that are available.
 	:param image:
@@ -214,7 +232,11 @@ def get_n_downloads_following_event(image: Contact, downloads: List, n: int = 1)
 	return downloads_
 
 
-def probability_event_linear_scale(x, x_min, x_max):
+def probability_event_linear_scale(
+		x,
+		x_min,
+		x_max
+) -> float:
 	"""
 	Probability that an event has happened at some time between some min & max,
 	given a linear probability distribution between those limits
@@ -223,7 +245,10 @@ def probability_event_linear_scale(x, x_min, x_max):
 	return (x - x_min) / (x_max - x_min)
 
 
-def prob_arrival_via_download(t: Time, download: Contact):
+def prob_arrival_via_download(
+		t: Time,
+		download: Contact
+) -> float:
 	"""
 	Probability that data, if it had been downloaded during this "download" event,
 	would have been delivered to the customer by time "t".
@@ -246,7 +271,7 @@ def prob_of_data_by_time(
 		t_arrival: Time,
 		downloads: List[Contact],
 		cloud: float,
-):
+) -> float:
 	"""
 	Return probability that cloud-free data from an image event has arrived
 	:param image: Image object
@@ -282,7 +307,10 @@ def prob_of_data_by_time(
 	return prob_image_exists * total_prob_arr_via_download
 
 
-def get_cloud_fraction_at_time(t: float, clouds: Dict) -> float:
+def get_cloud_fraction_at_time(
+		t: float,
+		clouds: Dict
+) -> float:
 	idx = bisect(list(clouds), t)
 	t0 = list(clouds)[idx]
 
@@ -305,34 +333,32 @@ def main(
 	# Define the date and time from which we want to extract TLE data. This should be
 	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
 	# of interest), considering that there can be gaps in TLE data of a couple of days.
-	epoch_time = day0 - timedelta(pre_day0_period + 3)  # datetime object
-	epoch_time_str = str(epoch_time)[0:10]
-	end_time = day0 + timedelta(1)
+	epoch_time = day0 - timedelta(pre_day0_period + 3)  # epoch as a datetime object
+	epoch_time_str = str(epoch_time)[0:10]  # date component of epoch as a string
+	end_time = day0 + timedelta(1)  # end of time horizon (plus 1 day) as a datetime
 	end_time_str = str(end_time)[0:10]  # date component of the day 0, in a string format
-	filename = f"{platform}.txt"
-
-	with open(f"{platform}_ids.txt", "r") as file_norads:
-		norad_ids = file_norads.read()
-
-	# Get all TLE data for each satellite in the list between the start and end dates
-	tle_response = space_track_api_request(epoch_time_str, end_time_str, norad_ids)
-
-	# Write the retrieved TLE data to a text file
-	with open(filename, "w", newline="") as text_file:
-		text_file.write(tle_response.text)
-
-	# Build a dict of EarthSatellite objects, arranged by their NORAD ID and then by epoch
-	satellites_all_epochs = load.tle_file(filename)
-
-	day0_ts = load.timescale().utc(
+	day0_ts = load.timescale().utc(  # Day 0 as a Timescale object
 		day0.year, day0.month, day0.day, day0.hour, day0.minute, day0.second)
-	epoch_ts = day0_ts - pre_day0_period
+	epoch_ts = day0_ts - pre_day0_period  # Epoch time as a Timescale object
+
+	filename = f"tle_data//{platform}_tle_{epoch_time_str}_{end_time_str}.txt"
+
+	if not os.path.isfile(filename):  # Skip if we already have this data
+		with open(f"{platform}_ids.txt", "r") as file_norads:
+			norad_ids = file_norads.read()
+
+		# Get all TLE data for each satellite in the list between the start and end dates
+		tle_response = space_track_api_request(epoch_time_str, end_time_str, norad_ids)
+
+		# Write the retrieved TLE data to a text file
+		with open(filename, "w", newline="") as text_file:
+			text_file.write(tle_response.text)
 
 	# For each satellite platform, extract the EarthSatellite object with an epoch
-	# closest to (but earlier than) the earliest time at which data can be considered
+	# closest to (but no later than) the earliest time at which data is considered to be
 	# of value
 	satellites_best_epoch = {}
-	for s in satellites_all_epochs:
+	for s in load.tle_file(filename):
 		# If our TLE epoch is greater than the time from which we're considering
 		# images to be "valuable", skip since we need something earlier
 		if s.epoch.tt > epoch_ts.tt:
@@ -415,7 +441,9 @@ def main(
 if __name__ == "__main__":
 	cities = ["denver"]
 	day0 = datetime(2022, 6, 30, 20, 0, 0)
+	pre_day0 = 3
+	
 	probabilities = {}
 	for city in cities:
-		probabilities[city] = main(city, day0, 3)
+		probabilities[city] = main(city, day0, pre_day0)
 	print('complete')
