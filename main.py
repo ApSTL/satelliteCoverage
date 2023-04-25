@@ -17,37 +17,6 @@ from skyfield.toposlib import GeographicPosition
 from space_track_api_script import space_track_api_request
 
 
-# Probability of downloading an image during the subsequent X ground station passes.
-# E.g. If only one pass is considered, then there's a 100% probability then that pass
-# is used. If two passes, then 75% chance the first is used, and 25% the second is used.
-DOWNLOAD_PROBABILITY = {
-	1: [1.0],
-	2: [0.75, 0.25],
-	3: [0.6, 0.3, 0.1],
-	4: [0.5, 0.25, 0.1, 0.05]
-}
-
-# The number of downloads considered reasonable before data acquired earlier is
-# guaranteed to have been downloaded.
-NUM_DOWNLOADS_CONSIDERED: int = 2
-
-T_MIN = 1 / 24  # Time (days) since download before which 0% chance of data arrival
-T_MAX = 6 / 24  # Time (days) since download after which 100% chance of data arrival
-
-PLATFORM_ATTRIBS = {
-		"for": {  # Field of regard (half-angle)
-			"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
-			# TODO Update to be realistic
-			"SKYSAT": radians(30.)
-		},
-		"aq_prob": {  # probability that imaging opportunity results in capture
-			# TODO Update to be realistic
-			"FLOCK": 1.0,
-			"SKYSAT": 0.2
-		}
-	}
-
-
 class Spacecraft:
 	def __init__(
 			self,
@@ -100,6 +69,45 @@ class Contact:
 		if self.t_peak.J <= other.t_peak.J:
 			return True
 		return False
+
+
+# Probability of downloading an image during the subsequent X ground station passes.
+# E.g. If only one pass is considered, then there's a 100% probability then that pass
+# is used. If two passes, then 75% chance the first is used, and 25% the second is used.
+DOWNLOAD_PROBABILITY = {
+	1: [1.0],
+	2: [0.75, 0.25],
+	3: [0.6, 0.3, 0.1],
+	4: [0.5, 0.25, 0.1, 0.05]
+}
+
+# The number of downloads considered reasonable before data acquired earlier is
+# guaranteed to have been downloaded.
+NUM_DOWNLOADS_CONSIDERED: int = 2
+
+T_MIN = 1 / 24  # Time (days) since download before which 0% chance of data arrival
+T_MAX = 6 / 24  # Time (days) since download after which 100% chance of data arrival
+
+PLATFORM_ATTRIBS = {
+		"for": {  # Field of regard (half-angle)
+			"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
+			# TODO Update to be realistic
+			"SKYSAT": radians(30.)
+		},
+		"aq_prob": {  # probability that imaging opportunity results in capture
+			# TODO Update to be realistic
+			"FLOCK": 1.0,
+			"SKYSAT": 0.1
+		}
+	}
+
+# Define the Ground Stations to which images are downloaded
+GROUND_STATIONS = [
+	Location("Yukon", wgs84.latlon(69.588837, -139.048477)),  # Estimated position
+	Location("North Dakota", wgs84.latlon(48.412949, -97.487445)),  # Estimated position
+	Location("Iceland", wgs84.latlon(64.872589, -22.379039)),  # Estimated position
+	Location("Awarura", wgs84.latlon(-46.528890, 168.381881)),
+]
 
 
 def extract_cloud_data(
@@ -447,12 +455,6 @@ def main(
 
 	city_location = Location(city, find_city_location(city))
 
-	# Define the Ground Stations to which images are downloaded
-	ground_stations = [
-		Location("North Pole", wgs84.latlon(90.0, 0.0)),
-		Location("South Pole", wgs84.latlon(-90.0, 0.0))
-	]
-
 	# Get cloud data for the city of interest during our time horizon
 	cloud_data = extract_cloud_data(city, epoch_time, day0)
 
@@ -460,10 +462,10 @@ def main(
 	# realised, because of things like cloud cover and/or time of day, but these are
 	# events in which the satellite is above the minimum elevation for the target
 	contacts = get_contact_events(
-		spacecraft_all, [city_location], ground_stations, epoch_ts, day0_ts)
+		spacecraft_all, [city_location], GROUND_STATIONS, epoch_ts, day0_ts)
 
 	images = sorted([c for c in contacts if c.target.name == city])
-	downloads = sorted([c for c in contacts if c.target in ground_stations])
+	downloads = sorted([c for c in contacts if c.target in GROUND_STATIONS])
 
 	# Given a particular City, and a particular "Day 0", get the probability that a
 	# decision maker will have received useful (processed) data, with which a trading
