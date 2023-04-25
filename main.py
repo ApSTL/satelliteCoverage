@@ -420,6 +420,7 @@ def main(
 	# Define the date and time from which we want to extract TLE data. This should be
 	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
 	# of interest), considering that there can be gaps in TLE data of a couple of days.
+	# TODO Make clearer why epoch is 3 days earlier in this case
 	epoch_time = day0 - timedelta(pre_day0_period + 3)  # epoch as a datetime object
 	epoch_time_str = str(epoch_time)[0:10]  # date component of epoch as a string
 	end_time = day0 + timedelta(1)  # end of time horizon (plus 1 day) as a datetime
@@ -486,7 +487,7 @@ def main(
 if __name__ == "__main__":
 	cities = ["Denver"]  # NOTE: This must match the name of the city in the lat-lon CSV
 	day0 = datetime(2022, 6, 30, 20, 0, 0)
-	pre_day0 = 2
+	pre_day0 = 5
 
 	probabilities = {}
 	for city in cities:
