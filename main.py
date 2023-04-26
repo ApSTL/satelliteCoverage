@@ -164,29 +164,30 @@ def for_elevation_from_half_angle(
 
 def get_contact_events(
 		sats: List,
-		targs: List,
-		stations: List,
+		locations: List,
 		t0: Time,
-		t1: Time
+		t1: Time,
+		is_target: bool = True
 ) -> List:
 	"""
 	Return all contact events between a set of satellites and ground locations
 	:param sats: List of Spacecraft objects
-	:param targs: List of Location objects representing Imaging targets
+	:param locations: List of Location objects representing Imaging targets
 	:param stations: List of Location objects representing Ground Stations
 	:param t0: Time horizon start
 	:param t1: Time horizon end
+	:param is_target: Boolean indicating whether or not the ground node is an image target
 	:return:
 	"""
 	R_E = 6371000.8  # Mean Earth radius
 	contacts = []
 	# For each satellite<>location pair, get all contact events during the horizon
 	for s in sats:
-		for location in targs + stations:
+		for location in locations:
 
 			# Set the elevation angle above the horizon that defines "contact",
 			# depending on whether the location is a Target or Ground Station
-			if location in targs:
+			if is_target:
 				# FIXME using the perigee altitude here to get angle above the horizon
 				#  that results in a "contact", however this would not work if we're in
 				#  an elliptical orbit, since the elevation angle would change over time
@@ -331,7 +332,11 @@ def get_cloud_fraction_at_time(
 
 
 def fetch_satellite_tle_data(
-		filename_tle, filename_norad, epoch_time_str, end_time_str):
+		filename_tle,
+		filename_norad,
+		epoch_time_str,
+		end_time_str
+) -> None:
 	with open(filename_norad, "r") as file_norads:
 		norad_ids = file_norads.read()
 
@@ -361,6 +366,39 @@ def get_satellites_closest_to_epoch(
 		if s.epoch.tt > satellites_best_epoch[s.model.satnum].epoch.tt:
 			satellites_best_epoch[s.model.satnum] = s
 	return satellites_best_epoch
+
+
+def get_spacecraft_from_epoch(
+		platform,
+		epoch_ts,
+		epoch_time_str,
+		end_time_str
+) -> List[Spacecraft]:
+	file_tle = f"tle_data//{platform}_tle_{epoch_time_str}_{end_time_str}.txt"
+	if not os.path.isfile(file_tle):  # Skip if we already have this data
+		file_norad = f"norad_ids//{platform}_ids.txt"
+		fetch_satellite_tle_data(file_tle, file_norad, epoch_time_str, end_time_str)
+
+	# For each satellite platform, extract the EarthSatellite object with an epoch
+	# closest to (but no later than) the earliest time at which data is considered to be
+	# of value
+	satellites_best_epoch = get_satellites_closest_to_epoch(file_tle, epoch_ts)
+
+	# Create Spacecraft objects for each item in the TLE dataset
+	spacecraft_all = []
+	for satellite_id, satellite in satellites_best_epoch.items():
+		spacecraft_all.append(Spacecraft(
+			satellite,
+			[  # Field of regard (half angle, radians)
+				PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
+				if x in satellite.name
+			][0],
+			[  # Probability a location within the FoR will be acquired
+				PLATFORM_ATTRIBS["aq_prob"][x] for x in PLATFORM_ATTRIBS["aq_prob"]
+				if x in satellite.name
+			][0]
+		))
+	return spacecraft_all
 
 
 def get_probability_of_no_image(
@@ -410,12 +448,12 @@ def find_city_location(
 
 
 def main(
-		city: str = "Denver",
+		cities: List[str],
 		day0: datetime = datetime(2022, 6, 10, 20, 0, 0),
 		pre_day0_period: float = 1.0,
 		platform: str = "flock",  # "skysat"
 		cloud_threshold: float = 0.25  # maximum acceptable fraction of cloud cover
-) -> float:
+) -> Dict[str, float]:
 
 	# Define the date and time from which we want to extract TLE data. This should be
 	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
@@ -429,69 +467,48 @@ def main(
 		day0.year, day0.month, day0.day, day0.hour, day0.minute, day0.second)
 	epoch_ts = day0_ts - pre_day0_period  # Epoch time as a Timescale object
 
-	file_tle = f"tle_data//{platform}_tle_{epoch_time_str}_{end_time_str}.txt"
-	if not os.path.isfile(file_tle):  # Skip if we already have this data
-		file_norad = f"norad_ids//{platform}_ids.txt"
-		fetch_satellite_tle_data(file_tle, file_norad, epoch_time_str, end_time_str)
+	# Instantiate Spacecraft objects, one for each NORAD ID, with its epoch as close
+	# to, but later than, the epoch time specified.
+	satellites = get_spacecraft_from_epoch(platform, epoch_ts, epoch_time_str, end_time_str)
 
-	# For each satellite platform, extract the EarthSatellite object with an epoch
-	# closest to (but no later than) the earliest time at which data is considered to be
-	# of value
-	satellites_best_epoch = get_satellites_closest_to_epoch(file_tle, epoch_ts)
+	contacts = get_contact_events(satellites, GROUND_STATIONS, epoch_ts, day0_ts, False)
+	downloads = sorted(contacts)
+	probabilities = {}
+	for city in cities:
 
-	# Create Spacecraft objects for each item in the TLE dataset
-	spacecraft_all = []
-	for satellite_id, satellite in satellites_best_epoch.items():
-		spacecraft_all.append(Spacecraft(
-			satellite,
-			[  # Field of regard (half angle, radians)
-				PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
-				if x in satellite.name
-			][0],
-			[  # Probability a location within the FoR will be acquired
-				PLATFORM_ATTRIBS["aq_prob"][x] for x in PLATFORM_ATTRIBS["aq_prob"]
-				if x in satellite.name
-			][0]
-		))
+		city_location = Location(city, find_city_location(city))
 
-	city_location = Location(city, find_city_location(city))
+		# Get cloud data for the city of interest during our time horizon
+		cloud_data = extract_cloud_data(city, epoch_time, day0)
 
-	# Get cloud data for the city of interest during our time horizon
-	cloud_data = extract_cloud_data(city, epoch_time, day0)
+		# Get all the potential contact opportunities. These might not necessarily be
+		# realised, because of things like cloud cover and/or time of day, but these are
+		# events in which the satellite is above the minimum elevation for the target
+		images = get_contact_events(satellites, [city_location], epoch_ts, day0_ts)
+		images = sorted(images)
 
-	# Get all the potential contact opportunities. These might not necessarily be
-	# realised, because of things like cloud cover and/or time of day, but these are
-	# events in which the satellite is above the minimum elevation for the target
-	contacts = get_contact_events(
-		spacecraft_all, [city_location], GROUND_STATIONS, epoch_ts, day0_ts)
+		# Given a particular City, and a particular "Day 0", get the probability that a
+		# decision maker will have received useful (processed) data, with which a trading
+		# decision can be made. There should be a probability associated with images
+		# acquired during preceding days, rather than simply Day 0 imagery.
+		no_image = get_probability_of_no_image(
+			images,
+			downloads,
+			cloud_data,
+			cloud_threshold,
+			day0_ts
+		)
 
-	images = sorted([c for c in contacts if c.target.name == city])
-	downloads = sorted([c for c in contacts if c.target in GROUND_STATIONS])
-
-	# Given a particular City, and a particular "Day 0", get the probability that a
-	# decision maker will have received useful (processed) data, with which a trading
-	# decision can be made. There should be a probability associated with images
-	# acquired during preceding days, rather than simply Day 0 imagery.
-	no_image = get_probability_of_no_image(
-		images,
-		downloads,
-		cloud_data,
-		cloud_threshold,
-		day0_ts
-	)
-
-	# Get the TOTAL probability of having data insights of this target, but this time
-	return 1 - no_image
+		# Get the TOTAL probability of having data insights of this target, but this time
+		probabilities[city] = 1 - no_image
+	return probabilities
 
 
 if __name__ == "__main__":
 	cities = ["Denver"]  # NOTE: This must match the name of the city in the lat-lon CSV
 	day0 = datetime(2022, 6, 30, 20, 0, 0)
 	pre_day0 = 5
-
-	probabilities = {}
-	for city in cities:
-		probabilities[city] = main(city, day0, pre_day0)
+	probabilities_all_cities = main(cities, day0, pre_day0)
 	print(f"Probability of receiving data less than {pre_day0} days old:")
-	for city, prob in probabilities.items():
+	for city, prob in probabilities_all_cities.items():
 		print(f"-> {city}: {prob}")
