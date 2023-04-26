@@ -164,7 +164,7 @@ def for_elevation_from_half_angle(
 
 def get_contact_events(
 		sats: List,
-		locations: List,
+		location: Location,
 		t0: Time,
 		t1: Time,
 		is_target: bool = True
@@ -183,38 +183,36 @@ def get_contact_events(
 	contacts = []
 	# For each satellite<>location pair, get all contact events during the horizon
 	for s in sats:
-		for location in locations:
+		# Set the elevation angle above the horizon that defines "contact",
+		# depending on whether the location is a Target or Ground Station
+		if is_target:
+			# FIXME using the perigee altitude here to get angle above the horizon
+			#  that results in a "contact", however this would not work if we're in
+			#  an elliptical orbit, since the elevation angle would change over time
+			elev_angle = degrees(for_elevation_from_half_angle(
+				s.for_, s.satellite.model.altp * R_E))
+		else:
+			elev_angle = 10
 
-			# Set the elevation angle above the horizon that defines "contact",
-			# depending on whether the location is a Target or Ground Station
-			if is_target:
-				# FIXME using the perigee altitude here to get angle above the horizon
-				#  that results in a "contact", however this would not work if we're in
-				#  an elliptical orbit, since the elevation angle would change over time
-				elev_angle = degrees(for_elevation_from_half_angle(
-					s.for_, s.satellite.model.altp * R_E))
-			else:
-				elev_angle = 10
+		# Get the rise, culmination and fall for all passes between this
+		# satellite:target pair during the time horizon
+		t, events = s.satellite.find_events(
+			location.location, t0, t1, altitude_degrees=elev_angle)
 
-			# Get the rise, culmination and fall for all passes between this
-			# satellite:target pair during the time horizon
-			t, events = s.satellite.find_events(
-				location.location, t0, t1, altitude_degrees=elev_angle)
-
-			# Pre-set the
-			t_rise = t0
-			t_peak = t0
-			for ti, event in zip(t, events):
-				# If the event is 0 (i.e. "rise"), store the rise event, else if it's
-				# 0 (i.e. "culmination"), continue
-				if event == 0:  # If this is a Rise event, set the rise time
-					t_rise = ti
-					continue
-				if event == 1:  # if this is a Peak event, skip
-					t_peak = ti
-					continue
-				# So long as a rise time has been defined, instantiate the Download event
-				contacts.append(Contact(s, location, t_rise, t_peak, ti))
+		# Pre-set the
+		t_rise = t0
+		t_peak = t0
+		for ti, event in zip(t, events):
+			# If the event is 0 (i.e. "rise"), store the rise event, else if it's
+			# 0 (i.e. "culmination"), continue
+			if event == 0:  # If this is a Rise event, set the rise time
+				t_rise = ti
+				continue
+			if event == 1:  # if this is a Peak event, skip
+				t_peak = ti
+				continue
+			# So long as a rise time has been defined, instantiate the Download event
+			contacts.append(Contact(s, location, t_rise, t_peak, ti))
 	return contacts
 
 
@@ -307,6 +305,8 @@ def prob_of_data_by_time(
 	total_prob_arr_via_download = 0
 	k = 0
 	for d in downloads_:
+		if not d:
+			continue
 		prob_arrival_via_d = prob_arrival_via_download(t_arrival, d)
 		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[NUM_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
 		k += 1
@@ -323,8 +323,9 @@ def get_cloud_fraction_at_time(
 	idx = bisect(list(clouds), t)
 	t0 = list(clouds)[idx]
 
-	# TODO what if t is > the largest time in clouds? It shouldn't ever be, but this
-	#  would fall over if it is
+	if idx == len(clouds) - 1:
+		return clouds[t0]
+
 	t1 = list(clouds)[idx+1]
 
 	# TODO extrapolate between t0 & t1 to get actual cloud cover
@@ -452,7 +453,7 @@ def main(
 		day0: datetime = datetime(2022, 6, 10, 20, 0, 0),
 		pre_day0_period: float = 1.0,
 		platform: str = "flock",  # "skysat"
-		cloud_threshold: float = 0.25  # maximum acceptable fraction of cloud cover
+		cloud_threshold: float = 1.0  # maximum acceptable fraction of cloud cover
 ) -> Dict[str, float]:
 
 	# Define the date and time from which we want to extract TLE data. This should be
@@ -471,22 +472,25 @@ def main(
 	# to, but later than, the epoch time specified.
 	satellites = get_spacecraft_from_epoch(platform, epoch_ts, epoch_time_str, end_time_str)
 
-	contacts = get_contact_events(satellites, GROUND_STATIONS, epoch_ts, day0_ts, False)
-	downloads = sorted(contacts)
+	downloads = []
+	for gs in GROUND_STATIONS:
+		downloads.extend(
+			get_contact_events(satellites, gs, epoch_ts, day0_ts, False)
+		)
+	downloads = sorted(downloads)
+
 	probabilities = {}
 	for city in cities:
-
 		city_location = Location(city, find_city_location(city))
-
-		# Get cloud data for the city of interest during our time horizon
-		cloud_data = extract_cloud_data(city, epoch_time, day0)
-
 		# Get all the potential contact opportunities. These might not necessarily be
 		# realised, because of things like cloud cover and/or time of day, but these are
 		# events in which the satellite is above the minimum elevation for the target
-		images = get_contact_events(satellites, [city_location], epoch_ts, day0_ts)
-		images = sorted(images)
+		images = sorted(
+			get_contact_events(satellites, city_location, epoch_ts, day0_ts)
+		)
 
+		# Get cloud data for the city of interest during our time horizon
+		cloud_data = extract_cloud_data(city, epoch_time, day0)
 		# Given a particular City, and a particular "Day 0", get the probability that a
 		# decision maker will have received useful (processed) data, with which a trading
 		# decision can be made. There should be a probability associated with images
@@ -505,9 +509,10 @@ def main(
 
 
 if __name__ == "__main__":
-	cities = ["Denver"]  # NOTE: This must match the name of the city in the lat-lon CSV
-	day0 = datetime(2022, 6, 30, 20, 0, 0)
-	pre_day0 = 5
+	# NOTE: This must match the name of the city in the lat-lon CSV
+	cities = ["Denver", "New York", "Los Angeles"]
+	day0 = datetime(2022, 11, 7, 5, 0, 0)
+	pre_day0 = 1
 	probabilities_all_cities = main(cities, day0, pre_day0)
 	print(f"Probability of receiving data less than {pre_day0} days old:")
 	for city, prob in probabilities_all_cities.items():
