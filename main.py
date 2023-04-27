@@ -10,11 +10,11 @@ from math import acos, sin, pi, radians, degrees
 from typing import List, Dict
 
 import skyfield.api
-from skyfield.api import wgs84, load, Time
+from skyfield.api import wgs84, load, Time, utc
 from skyfield.toposlib import GeographicPosition
 
 from space_track_api_script import space_track_api_request
-from cloud import get_cloud_fraction_at_time
+from cloud import get_cloud_fraction_at_time, extract_cloud_data
 
 
 class Spacecraft:
@@ -110,36 +110,6 @@ GROUND_STATIONS = [
 ]
 
 
-def extract_cloud_data(
-		location: str,
-		start: datetime,
-		end: datetime
-) -> Dict:
-	"""
-	Import cloud cover fraction data from CSV file (obtained from openweathermap) between
-	two dates, for a particular location.
-
-	:param location: [str] name of location of interest (must match the name of the csv)
-	:param start: [datetime.datetime] Time at which cloud data starts
-	:param end: [datetime.datetime] Time at which cloud data ends
-	:return: [Dict] {Julian Date: cloud fraction}
-	"""
-	cloud_info = {}
-	filepath = f"weather//{location}.csv"
-	with open(filepath, newline='') as csvfile:
-		city_weather = csv.reader(csvfile, quotechar='|')
-		for row in city_weather:
-			if city_weather.line_num == 1:
-				cloud_idx = row.index("clouds_all")
-				continue
-			time_ = datetime.fromisoformat(row[1][0:19])
-			if time_ < start or time_ > end:
-				continue
-			time_ts = load.timescale().utc(time_.year, time_.month, time_.day, time_.hour)
-			cloud_info[time_ts.tt] = int(row[cloud_idx])/100
-	return cloud_info
-
-
 def for_elevation_from_half_angle(
 		half_angle,
 		altitude
@@ -165,8 +135,8 @@ def for_elevation_from_half_angle(
 def get_contact_events(
 		sats: List,
 		location: Location,
-		t0: Time,
-		t1: Time,
+		t0: datetime,
+		t1: datetime,
 		is_target: bool = True
 ) -> List:
 	"""
@@ -174,7 +144,7 @@ def get_contact_events(
 	:param sats: List of Spacecraft objects
 	:param locations: List of Location objects representing Imaging targets
 	:param stations: List of Location objects representing Ground Stations
-	:param t0: Time horizon start
+	:param t0_ts: Time horizon start
 	:param t1: Time horizon end
 	:param is_target: Boolean indicating whether or not the ground node is an image target
 	:return:
@@ -196,12 +166,14 @@ def get_contact_events(
 
 		# Get the rise, culmination and fall for all passes between this
 		# satellite:target pair during the time horizon
+		t0_ts = load.timescale().from_datetime(t0.astimezone(utc))
+		t1_ts = load.timescale().from_datetime(t1.astimezone(utc))
 		t, events = s.satellite.find_events(
-			location.location, t0, t1, altitude_degrees=elev_angle)
+			location.location, t0_ts, t1_ts, altitude_degrees=elev_angle)
 
 		# Pre-set the
-		t_rise = t0
-		t_peak = t0
+		t_rise = t0_ts
+		t_peak = t0_ts
 		for ti, event in zip(t, events):
 			# If the event is 0 (i.e. "rise"), store the rise event, else if it's
 			# 0 (i.e. "culmination"), continue
@@ -253,7 +225,7 @@ def probability_event_linear_scale(
 
 
 def prob_arrival_via_download(
-		t: Time,
+		t: datetime,
 		download: Contact
 ) -> float:
 	"""
@@ -261,6 +233,7 @@ def prob_arrival_via_download(
 	would have been delivered to the customer by time "t".
 	:return:
 	"""
+	t = load.timescale().from_datetime(t.astimezone(utc))
 	if t.tt <= (download.t_set + T_MIN).tt:
 		return 0.
 	elif t.tt >= (download.t_set + T_MAX).tt:
@@ -275,7 +248,7 @@ def prob_arrival_via_download(
 
 def prob_of_data_by_time(
 		image: Contact,
-		t_arrival: Time,
+		t_arrival: datetime,
 		downloads: List[Contact],
 		cloud: float,
 ) -> float:
@@ -355,19 +328,26 @@ def get_satellites_closest_to_epoch(
 
 def get_spacecraft_from_epoch(
 		platform,
-		epoch_ts,
-		epoch_time_str,
-		end_time_str
+		pre_epoch_time,
+		epoch,
+		end_time
 ) -> List[Spacecraft]:
-	file_tle = f"tle_data//{platform}_tle_{epoch_time_str}_{end_time_str}.txt"
+	# Format the different times as required
+	pre_epoch_time_str = str(pre_epoch_time)[0:10]
+	end_time_str = str(end_time)[0:10]
+
+	file_tle = f"tle_data//{platform}_tle_{pre_epoch_time_str}_{end_time_str}.txt"
 	if not os.path.isfile(file_tle):  # Skip if we already have this data
 		file_norad = f"norad_ids//{platform}_ids.txt"
-		fetch_satellite_tle_data(file_tle, file_norad, epoch_time_str, end_time_str)
+		fetch_satellite_tle_data(file_tle, file_norad, pre_epoch_time_str, end_time_str)
 
 	# For each satellite platform, extract the EarthSatellite object with an epoch
 	# closest to (but no later than) the earliest time at which data is considered to be
 	# of value
-	satellites_best_epoch = get_satellites_closest_to_epoch(file_tle, epoch_ts)
+	satellites_best_epoch = get_satellites_closest_to_epoch(
+		file_tle,
+		load.timescale().from_datetime(epoch.astimezone(utc))
+	)
 
 	# Create Spacecraft objects for each item in the TLE dataset
 	spacecraft_all = []
@@ -388,23 +368,15 @@ def get_spacecraft_from_epoch(
 
 def get_probability_of_no_image(
 		city,
-		satellites,
+		images,
 		downloads,
 		cloud_threshold,
 		day0,
-		day0_ts,
-		epoch_ts
+		pre_epoch
 ) -> float:
-	city_location = Location(city, find_city_location(city))
-	# Get all the potential contact opportunities. These might not necessarily be
-	# realised, because of things like cloud cover and/or time of day, but these are
-	# events in which the satellite is above the minimum elevation for the target
-	images = sorted(
-		get_contact_events(satellites, city_location, epoch_ts, day0_ts)
-	)
-
+	"""Get the probability that NO image will have been received of a particular location"""
 	# Get cloud data for the city of interest during our time horizon
-	cloud_data = extract_cloud_data(city, epoch_time, day0)
+	cloud_data = extract_cloud_data(f"weather//{city}.csv", pre_epoch, day0)
 	cumulative_probability_of_no_image = 1.
 	for image in images:
 		cloud_fraction = get_cloud_fraction_at_time(image.t_peak.tt, cloud_data)
@@ -417,7 +389,7 @@ def get_probability_of_no_image(
 		# Get the probability that the user will have data from this image by day0
 		prob = prob_of_data_by_time(
 			image,
-			day0_ts,
+			day0,
 			downloads,
 			cloud_fraction
 		)
@@ -455,23 +427,17 @@ def main(
 	# Define the date and time from which we want to extract TLE data. This should be
 	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
 	# of interest), considering that there can be gaps in TLE data of a couple of days.
-	# TODO Make clearer why epoch is 3 days earlier in this case
-	epoch_time = day0 - timedelta(pre_day0_period + 3)  # epoch as a datetime object
-	epoch_time_str = str(epoch_time)[0:10]  # date component of epoch as a string
-	end_time = day0 + timedelta(1)  # end of time horizon (plus 1 day) as a datetime
-	end_time_str = str(end_time)[0:10]  # date component of the day 0, in a string format
-	day0_ts = load.timescale().utc(  # Day 0 as a Timescale object
-		day0.year, day0.month, day0.day, day0.hour, day0.minute, day0.second)
-	epoch_ts = day0_ts - pre_day0_period  # Epoch time as a Timescale object
+	epoch = day0 - timedelta(pre_day0_period)  # pre-epoch time as a datatime object
+	pre_epoch = day0 - timedelta(pre_day0_period + 3)  # epoch as a datetime object
 
 	# Instantiate Spacecraft objects, one for each NORAD ID, with its epoch as close
 	# to, but later than, the epoch time specified.
-	satellites = get_spacecraft_from_epoch(platform, epoch_ts, epoch_time_str, end_time_str)
+	satellites = get_spacecraft_from_epoch(platform, pre_epoch, epoch, day0)
 
 	downloads = []
 	for gs in GROUND_STATIONS:
 		downloads.extend(
-			get_contact_events(satellites, gs, epoch_ts, day0_ts, False)
+			get_contact_events(satellites, gs, epoch, day0, False)
 		)
 	downloads = sorted(downloads)
 
@@ -481,14 +447,23 @@ def main(
 		# decision maker will have received useful (processed) data, with which a trading
 		# decision can be made. There should be a probability associated with images
 		# acquired during preceding days, rather than simply Day 0 imagery.
+		city_location = Location(city, find_city_location(city))
+		# Get all the potential contact opportunities. These might not necessarily be
+		# realised, because of things like cloud cover and/or time of day, but these are
+		# events in which the satellite is above the minimum elevation for the target
+		images = sorted(
+			get_contact_events(satellites, city_location, epoch, day0)
+		)
+
+		# Given the set of images of this city, and the set of Download opportunities,
+		# find the probability that NO image is received by Day 0
 		no_image = get_probability_of_no_image(
 			city,
-			satellites,
+			images,
 			downloads,
 			cloud_threshold,
 			day0,
-			day0_ts,
-			epoch_ts
+			pre_epoch
 		)
 
 		# Get the TOTAL probability of having data insights of this target, but this time
