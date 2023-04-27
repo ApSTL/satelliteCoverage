@@ -89,16 +89,20 @@ T_MIN = 1 / 24  # Time (days) since download before which 0% chance of data arri
 T_MAX = 6 / 24  # Time (days) since download after which 100% chance of data arrival
 
 PLATFORM_ATTRIBS = {
-		"for": {  # Field of regard (half-angle)
-			"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
-			# TODO Update to be realistic
-			"SKYSAT": radians(30.)
-		},
-		"aq_prob": {  # probability that imaging opportunity results in capture
-			# TODO Update to be realistic
-			"FLOCK": 1.0,
-			"SKYSAT": 0.1
-		}
+	"for": {  # Field of regard (half-angle)
+		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
+		# TODO Update to be realistic
+		"SKYSAT": radians(30.)
+	},
+	"aq_prob": {  # probability that imaging opportunity results in capture
+		# TODO Update to be realistic
+		"FLOCK": 1.0,
+		"SKYSAT": 0.1
+	},
+	"download_prob": {
+		"FLOCK": 1 / 8,
+		"SKYSAT": 0.8
+	}
 	}
 
 # Define the Ground Stations to which images are downloaded
