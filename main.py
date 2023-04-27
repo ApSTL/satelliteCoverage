@@ -5,7 +5,6 @@ given cloud coverage data and satellite position data
 
 import os
 import csv
-from bisect import bisect
 from datetime import datetime, timedelta
 from math import acos, sin, pi, radians, degrees
 from typing import List, Dict
@@ -15,6 +14,7 @@ from skyfield.api import wgs84, load, Time
 from skyfield.toposlib import GeographicPosition
 
 from space_track_api_script import space_track_api_request
+from cloud import get_cloud_fraction_at_time
 
 
 class Spacecraft:
@@ -316,22 +316,6 @@ def prob_of_data_by_time(
 	return prob_image_exists * total_prob_arr_via_download
 
 
-def get_cloud_fraction_at_time(
-		t: float,
-		clouds: Dict
-) -> float:
-	idx = bisect(list(clouds), t)
-	t0 = list(clouds)[idx]
-
-	if idx == len(clouds) - 1:
-		return clouds[t0]
-
-	t1 = list(clouds)[idx+1]
-
-	# TODO extrapolate between t0 & t1 to get actual cloud cover
-	return clouds[t0]
-
-
 def fetch_satellite_tle_data(
 		filename_tle,
 		filename_norad,
@@ -403,12 +387,24 @@ def get_spacecraft_from_epoch(
 
 
 def get_probability_of_no_image(
-		images,
+		city,
+		satellites,
 		downloads,
-		cloud_data,
 		cloud_threshold,
-		day0_ts
+		day0,
+		day0_ts,
+		epoch_ts
 ) -> float:
+	city_location = Location(city, find_city_location(city))
+	# Get all the potential contact opportunities. These might not necessarily be
+	# realised, because of things like cloud cover and/or time of day, but these are
+	# events in which the satellite is above the minimum elevation for the target
+	images = sorted(
+		get_contact_events(satellites, city_location, epoch_ts, day0_ts)
+	)
+
+	# Get cloud data for the city of interest during our time horizon
+	cloud_data = extract_cloud_data(city, epoch_time, day0)
 	cumulative_probability_of_no_image = 1.
 	for image in images:
 		cloud_fraction = get_cloud_fraction_at_time(image.t_peak.tt, cloud_data)
@@ -481,26 +477,18 @@ def main(
 
 	probabilities = {}
 	for city in cities:
-		city_location = Location(city, find_city_location(city))
-		# Get all the potential contact opportunities. These might not necessarily be
-		# realised, because of things like cloud cover and/or time of day, but these are
-		# events in which the satellite is above the minimum elevation for the target
-		images = sorted(
-			get_contact_events(satellites, city_location, epoch_ts, day0_ts)
-		)
-
-		# Get cloud data for the city of interest during our time horizon
-		cloud_data = extract_cloud_data(city, epoch_time, day0)
 		# Given a particular City, and a particular "Day 0", get the probability that a
 		# decision maker will have received useful (processed) data, with which a trading
 		# decision can be made. There should be a probability associated with images
 		# acquired during preceding days, rather than simply Day 0 imagery.
 		no_image = get_probability_of_no_image(
-			images,
+			city,
+			satellites,
 			downloads,
-			cloud_data,
 			cloud_threshold,
-			day0_ts
+			day0,
+			day0_ts,
+			epoch_ts
 		)
 
 		# Get the TOTAL probability of having data insights of this target, but this time
