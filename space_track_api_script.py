@@ -82,7 +82,7 @@ def space_track_api_request(start, end, norad_ids):
         return resp
 
 
-print("Completed session")
+print("Completed TLE request session")
 
 
 if __name__ == "__main__":
