@@ -252,7 +252,7 @@ def prob_of_data_by_time(
 	# Extracting only every 8th download opportunity, to simulate something closer to
 	# the real download contact schedule seen by Planet's FLOCK
 	# TODO Remove the hard-coding
-	downloads_ = downloads_[::8]
+	downloads_trimmed = downloads_[::8]
 
 	# Initiate a variable that tracks the probability that data that WAS delivered would
 	# have arrived by this time. This does NOT consider the probability of it actually
@@ -260,8 +260,8 @@ def prob_of_data_by_time(
 	# download events, and we're only considering two download events feasible,
 	# then this would be 100%
 	total_prob_arr_via_download = 0
-	for k in range(MAX_DOWNLOADS_CONSIDERED):
-		prob_arrival_via_d = prob_arrival_via_download(t_arrival, downloads_[k])
+	for k in range(min(MAX_DOWNLOADS_CONSIDERED, len(downloads_trimmed))):
+		prob_arrival_via_d = prob_arrival_via_download(t_arrival, downloads_trimmed[k])
 		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[MAX_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
 
 	# Combine the probability of the image existing and the probability of it having
