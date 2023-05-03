@@ -83,7 +83,7 @@ DOWNLOAD_PROBABILITY = {
 
 # The number of downloads considered reasonable before data acquired earlier is
 # guaranteed to have been downloaded.
-NUM_DOWNLOADS_CONSIDERED: int = 2
+MAX_DOWNLOADS_CONSIDERED: int = 2
 
 T_MIN = 1 / 24  # Time (days) since download before which 0% chance of data arrival
 T_MAX = 6 / 24  # Time (days) since download after which 100% chance of data arrival
@@ -249,17 +249,20 @@ def prob_of_data_by_time(
 		if d.t_set.tt > image.t_peak.tt and d.satellite == image.satellite
 	]
 
+	# Extracting only every 8th download opportunity, to simulate something closer to
+	# the real download contact schedule seen by Planet's FLOCK
+	# TODO Remove the hard-coding
+	downloads_ = downloads_[::8]
+
 	# Initiate a variable that tracks the probability that data that WAS delivered would
 	# have arrived by this time. This does NOT consider the probability of it actually
 	# existing in the first place. E.g. if we're passed the max processing time for two
 	# download events, and we're only considering two download events feasible,
 	# then this would be 100%
 	total_prob_arr_via_download = 0
-	k = 0
-	for d in downloads_:
-		prob_arrival_via_d = prob_arrival_via_download(t_arrival, d)
-		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[NUM_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
-		k += 1
+	for k in range(MAX_DOWNLOADS_CONSIDERED):
+		prob_arrival_via_d = prob_arrival_via_download(t_arrival, downloads_[k])
+		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[MAX_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
 
 	# Combine the probability of the image existing and the probability of it having
 	# arrived IF it were downloaded, to get the overall probability of
