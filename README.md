@@ -1,6 +1,7 @@
 # satelliteCoverage
 Evaluate the delivery of processed data insights for a set of locations, from a set of satellites.
-![General flow of the model operations](/assests/model_flow.PNG)
+
+![General flow of the model operations](/assets/model_flow.PNG)
 
 ## General Overview
 By **running the main.py file**, the following procedure is executed:
