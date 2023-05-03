@@ -98,10 +98,6 @@ PLATFORM_ATTRIBS = {
 		# TODO Update to be realistic
 		"FLOCK": 1.0,
 		"SKYSAT": 0.1
-	},
-	"download_prob": {
-		"FLOCK": 1 / 8,
-		"SKYSAT": 0.8
 	}
 	}
 
@@ -192,29 +188,6 @@ def get_contact_events(
 	return contacts
 
 
-def get_n_downloads_following_event(
-		image: Contact,
-		downloads: List,
-		n: int = 1
-) -> List:
-	"""
-	Given a particular image event, find the n downloads that are available.
-	:param image:
-	:param downloads:
-	:param n:
-	:return:
-	"""
-	downloads_ = []  # List of download events available after image acquisition
-	for download in downloads:
-		if len(downloads_) == n:
-			break
-		if download.t_set.tt > image.t_peak.tt and download.satellite == image.satellite:
-			downloads_.append(download)
-	while len(downloads_) < n:
-		downloads_.append(None)
-	return downloads_
-
-
 def probability_event_linear_scale(
 		x,
 		x_min,
@@ -271,8 +244,10 @@ def prob_of_data_by_time(
 	# This is the MAX probability that the data product arrives at the customer
 	prob_image_exists = (1. - cloud) * image.satellite.aq_prob
 
-	downloads_ = get_n_downloads_following_event(
-		image, downloads, NUM_DOWNLOADS_CONSIDERED)
+	downloads_ = [
+		d for d in downloads
+		if d.t_set.tt > image.t_peak.tt and d.satellite == image.satellite
+	]
 
 	# Initiate a variable that tracks the probability that data that WAS delivered would
 	# have arrived by this time. This does NOT consider the probability of it actually
@@ -282,8 +257,6 @@ def prob_of_data_by_time(
 	total_prob_arr_via_download = 0
 	k = 0
 	for d in downloads_:
-		if not d:
-			continue
 		prob_arrival_via_d = prob_arrival_via_download(t_arrival, d)
 		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[NUM_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
 		k += 1
