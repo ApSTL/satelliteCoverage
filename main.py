@@ -85,6 +85,12 @@ DOWNLOAD_PROBABILITY = {
 # guaranteed to have been downloaded.
 MAX_DOWNLOADS_CONSIDERED: int = 2
 
+# It is unlikely that satellites make use of EVERY download opportunity. This value
+# represents the download access frequency, i.e. download will be available every Nth
+# pass. So, a lower number here, represents a higher frequency of actually utilising
+# downloads. 1 would be using every download, while 10 would be making use of every 10th.
+DOWNLOAD_FREQ = 8
+
 T_MIN = 1 / 24  # Time (days) since download before which 0% chance of data arrival
 T_MAX = 6 / 24  # Time (days) since download after which 100% chance of data arrival
 
@@ -251,8 +257,8 @@ def prob_of_data_by_time(
 
 	# Extracting only every 8th download opportunity, to simulate something closer to
 	# the real download contact schedule seen by Planet's FLOCK
-	# TODO Remove the hard-coding
-	downloads_trimmed = downloads_[::8]
+	# TODO Make this platform specific, currently hard coded for all
+	downloads_trimmed = downloads_[::DOWNLOAD_FREQ]
 
 	# Initiate a variable that tracks the probability that data that WAS delivered would
 	# have arrived by this time. This does NOT consider the probability of it actually
