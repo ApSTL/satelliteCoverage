@@ -4,7 +4,7 @@ Evaluate the delivery of processed data insights for a set of locations, from a 
 To run this analysis, call the `main()` function within the `main.py` script, passing the following as input arguments:
  1. **cities** _[List]_ A list of strings, where each string corresponds to the name of a city. This name should match (exactly) the name provided in the `/lat_lon_data/uscities_lat_lon.csv` file. There must also be weather data for this city, within the `/weather/` directory.
  2. **t_final** _[datetime]_ Time by which data insights must be available. E.g. the time at which a decision maker in a hedge fund needs the processed data in order to execute a particular trade.
- 3. **t_v0** _[float]_ Maximum number of days old that data is still of value. Images opportunities that occur between _t_final - t_v0_ and _t_final_ are considered in the analysis.
+ 3. **max_age** _[float]_ Maximum number of days old that data is still of value. Images opportunities that occur between _t_final - max_age_ and _t_final_ are considered in the analysis.
  4. **platform** _[str]_ Name of the satellite platform type to be considered in the analysis (currently only "flock" is handled, but "skysat" would be another option)
  5. **cloud_threshold** _[float]_ Maximum fraction of cloud cover before an image is considered to be of zero value and, therefore, not included in analysis. Value must be between 0 & 1.
 
