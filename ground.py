@@ -2,6 +2,17 @@ import csv
 
 from skyfield.api import wgs84
 
+from classes import Location
+
+
+# Define the Ground Stations to which images are downloaded
+GROUND_STATIONS = [
+	Location("Yukon", wgs84.latlon(69.588837, -139.048477)),  # Estimated position
+	Location("North Dakota", wgs84.latlon(48.412949, -97.487445)),  # Estimated position
+	Location("Iceland", wgs84.latlon(64.872589, -22.379039)),  # Estimated position
+	Location("Awarura", wgs84.latlon(-46.528890, 168.381881)),
+]
+
 
 def find_city_location(
 		city_name

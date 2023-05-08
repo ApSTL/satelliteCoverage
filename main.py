@@ -4,47 +4,49 @@ given cloud coverage data and satellite position data
 """
 
 from datetime import datetime, timedelta
-from typing import List, Dict
-
-from skyfield.api import wgs84
+from typing import List, Dict, Union
 
 from classes import Location
 from space import get_spacecraft_from_epoch
 from data_movement import get_contact_events, get_probability_of_no_image
-from ground import find_city_location
-
-
-# Define the Ground Stations to which images are downloaded
-GROUND_STATIONS = [
-	Location("Yukon", wgs84.latlon(69.588837, -139.048477)),  # Estimated position
-	Location("North Dakota", wgs84.latlon(48.412949, -97.487445)),  # Estimated position
-	Location("Iceland", wgs84.latlon(64.872589, -22.379039)),  # Estimated position
-	Location("Awarura", wgs84.latlon(-46.528890, 168.381881)),
-]
+from ground import find_city_location, GROUND_STATIONS
 
 
 def main(
 		cities: List[str],
-		day0: datetime = datetime(2022, 6, 10, 20, 0, 0),
-		pre_day0_period: float = 1.0,
-		platform: str = "flock",  # "skysat"
+		t_final: datetime = datetime(2022, 6, 10, 20, 0, 0),
+		max_age: Union[int, float] = 1.0,
+		platform: str = "flock",  # TODO add in "skysat" capabilities
 		cloud_threshold: float = 1.0  # maximum acceptable fraction of cloud cover
 ) -> Dict[str, float]:
+	"""
+	Return the probabilities, for a set of cities, that data insights will be 
+	available by a specific date/time, assuming image data less than a certain age
+	:param cities: [List] A list of strings, each mapping to a city with "weather" data
+	:param t_final: [datetime] Time by which data insights must be available
+	:param max_age: [float] Maximum number of days old that data is still of value
+	:param platform: [str] Mapping to the satellite platforms of interest
+	:param cloud_threshold: [float] Maximum fraction of cloud cover before an image is 
+		considered to be of zero value and, therefore, not included in analysis
+	"""
+
+	# Check to make sure we have weather information for each of the requested cities
+
 
 	# Define the date and time from which we want to extract TLE data. This should be
 	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
 	# of interest), considering that there can be gaps in TLE data of a couple of days.
-	epoch = day0 - timedelta(pre_day0_period)  # pre-epoch time as a datatime object
-	pre_epoch = day0 - timedelta(pre_day0_period + 3)  # epoch as a datetime object
+	t_v0 = t_final - timedelta(max_age)  # pre-epoch time as a datatime object
+	t_epoch = t_final - timedelta(max_age + 3)  # epoch as a datetime object
 
 	# Instantiate Spacecraft objects, one for each NORAD ID, with its epoch as close
 	# to, but later than, the epoch time specified.
-	satellites = get_spacecraft_from_epoch(platform, pre_epoch, epoch, day0)
+	satellites = get_spacecraft_from_epoch(platform, t_epoch, t_v0, t_final)
 
 	downloads = []
 	for gs in GROUND_STATIONS:
 		downloads.extend(
-			get_contact_events(satellites, gs, epoch, day0, False)
+			get_contact_events(satellites, gs, t_v0, t_final, False)
 		)
 	downloads = sorted(downloads)
 
@@ -59,7 +61,7 @@ def main(
 		# realised, because of things like cloud cover and/or time of day, but these are
 		# events in which the satellite is above the minimum elevation for the target
 		images = sorted(
-			get_contact_events(satellites, city_location, epoch, day0)
+			get_contact_events(satellites, city_location, t_v0, t_final)
 		)
 
 		# Given the set of images of this city, and the set of Download opportunities,
@@ -69,8 +71,8 @@ def main(
 			images,
 			downloads,
 			cloud_threshold,
-			day0,
-			pre_epoch
+			t_final,
+			t_epoch
 		)
 
 		# Get the TOTAL probability of having data insights of this target, but this time
@@ -80,10 +82,11 @@ def main(
 
 if __name__ == "__main__":
 	# NOTE: This must match the name of the city in the lat-lon CSV
-	cities = ["Denver", "New York", "Los Angeles"]
-	day0 = datetime(2022, 11, 7, 5, 0, 0)
-	pre_day0 = 1
-	probabilities_all_cities = main(cities, day0, pre_day0)
-	print(f"Probability of receiving data less than {pre_day0} days old:")
+	cities_input = ["Denver", "New York", "Los Angeles"]
+	t_f = datetime(2022, 11, 7, 5, 0, 0)
+	image_max_age = 1  # Maximum age (in days) an image is considered of value
+	probabilities_all_cities = main(cities_input, t_f, image_max_age)
+
+	print(f"Probability of receiving data less than {image_max_age} days old:")
 	for city, prob in probabilities_all_cities.items():
 		print(f"-> {city}: {prob}")

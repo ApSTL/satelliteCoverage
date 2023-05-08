@@ -1,14 +1,13 @@
 from math import radians
 
-import skyfield.api
-from skyfield.api import Time
+from skyfield.api import Time, EarthSatellite
 from skyfield.toposlib import GeographicPosition
 
 
 class Spacecraft:
 	def __init__(
 			self,
-			satellite: skyfield.api.EarthSatellite,
+			satellite: EarthSatellite,
 			field_of_regard: float = radians(30),
 			aq_prob: float = 1.0,
 			download_rate: float = 100.

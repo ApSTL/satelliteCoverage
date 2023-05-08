@@ -1,9 +1,10 @@
 import os
 from math import acos, sin, pi, radians, sqrt, cos, asin
-from typing import List, Dict
+from typing import List, Dict, Union
 from numpy import sign
+from datetime import datetime
 
-from skyfield.api import load, utc
+from skyfield.api import load, utc, Timescale, EarthSatellite
 
 from classes import Spacecraft
 from space_track_api_script import space_track_api_request
@@ -23,6 +24,8 @@ PLATFORM_ATTRIBS = {
 	}
 
 
+# TODO Not currently used, but was added in as a way to perhaps better dictate which
+#  ground station passes to consider as "usable" for each platform.
 def ppd(sma, inc, el, lat):
 	"""
 	Return the long-term average number of passes per day.
@@ -75,8 +78,8 @@ def ppd(sma, inc, el, lat):
 
 
 def for_elevation_from_half_angle(
-		half_angle,
-		altitude
+		half_angle: Union[int, float],
+		altitude: Union[int, float],
 ) -> float:
 	"""
 	Return the elevation above the horizon at the edge of the Field of Regard
@@ -95,17 +98,17 @@ def for_elevation_from_half_angle(
 	return acos(sin(half_angle) / sin(rho))
 
 
-def fetch_satellite_tle_data(
-		filename_tle,
-		filename_norad,
-		epoch_time_str,
-		end_time_str
+def fetch_tle_and_write_to_txt(
+		filename_tle: str,
+		filename_norad: str,
+		epoch_time: str,
+		end_time: str
 ) -> None:
 	with open(filename_norad, "r") as file_norads:
 		norad_ids = file_norads.read()
 
 	# Get all TLE data for each satellite in the list between the start and end dates
-	tle_response = space_track_api_request(epoch_time_str, end_time_str, norad_ids)
+	tle_response = space_track_api_request(epoch_time, end_time, norad_ids)
 
 	# Write the retrieved TLE data to a text file
 	with open(filename_tle, "w", newline="") as text_file:
@@ -113,9 +116,9 @@ def fetch_satellite_tle_data(
 
 
 def get_satellites_closest_to_epoch(
-		file_with_tle_data,
-		epoch
-) -> Dict:
+		file_with_tle_data: str,
+		epoch: Timescale
+) -> Dict[str, EarthSatellite]:
 	satellites_best_epoch = {}
 	for s in load.tle_file(file_with_tle_data):
 		# If our TLE epoch is greater than the time from which we're considering
@@ -132,12 +135,11 @@ def get_satellites_closest_to_epoch(
 	return satellites_best_epoch
 
 
-# SPACE
 def get_spacecraft_from_epoch(
-		platform,
-		pre_epoch_time,
-		epoch,
-		end_time
+		platform: str,
+		pre_epoch_time: datetime,
+		epoch: datetime,
+		end_time: datetime
 ) -> List[Spacecraft]:
 	# Format the different times as required
 	pre_epoch_time_str = str(pre_epoch_time)[0:10]
@@ -146,7 +148,7 @@ def get_spacecraft_from_epoch(
 	file_tle = f"tle_data//{platform}_tle_{pre_epoch_time_str}_{end_time_str}.txt"
 	if not os.path.isfile(file_tle):  # Skip if we already have this data
 		file_norad = f"norad_ids//{platform}_ids.txt"
-		fetch_satellite_tle_data(file_tle, file_norad, pre_epoch_time_str, end_time_str)
+		fetch_tle_and_write_to_txt(file_tle, file_norad, pre_epoch_time_str, end_time_str)
 
 	# For each satellite platform, extract the EarthSatellite object with an epoch
 	# closest to (but no later than) the earliest time at which data is considered to be
