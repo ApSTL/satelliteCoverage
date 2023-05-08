@@ -1,7 +1,6 @@
 from math import radians
 
-from skyfield.api import Time, EarthSatellite
-from skyfield.toposlib import GeographicPosition
+from skyfield.api import Time, EarthSatellite, wgs84
 
 
 class Spacecraft:
@@ -18,7 +17,6 @@ class Spacecraft:
 		self.download_rate = download_rate
 
 	def __repr__(self):
-		# FIXME this isn't correct...
 		return self.satellite.satellite.__str__()
 
 
@@ -26,10 +24,10 @@ class Location:
 	def __init__(
 			self,
 			name: str,
-			location: GeographicPosition
+			location: tuple
 	):
 		self.name = name
-		self.location = location
+		self.location = wgs84.latlon(location[0], location[1])
 
 
 class Contact:

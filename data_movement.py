@@ -106,8 +106,8 @@ def prob_arrival_via_download(
 	# Replace this function with a different probability function if required.
 	return probability_event_linear_scale(
 		t,
-		download.t_set + T_MIN,
-		download.t_set + T_MAX
+		download.t_set + T_MAX,
+		download.t_set + T_MIN
 	)
 
 
