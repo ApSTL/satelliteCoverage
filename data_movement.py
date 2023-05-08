@@ -1,6 +1,6 @@
 from datetime import datetime
 from math import degrees
-from typing import List
+from typing import List, Dict
 
 from skyfield.api import load, utc
 
@@ -91,47 +91,46 @@ def get_contact_events(
 
 def prob_arrival_via_download(
 		t: datetime,
-		download: Contact
+		download: Contact,
+		processing_time_min: float = T_MIN,
+		processing_time_max: float = T_MAX
 ) -> float:
 	"""
 	Probability that data, if it had been downloaded during this "download" event,
-	would have been delivered to the customer by time "t".
+	would have been delivered to the customer by time "t", given some minimum and
+	maximum amount of necessary processing time (post download).
 	:return:
 	"""
 	t = load.timescale().from_datetime(t.astimezone(utc))
-	if t.tt <= (download.t_set + T_MIN).tt:
+
+	if t.tt <= (download.t_set + processing_time_min).tt:
 		return 0.
-	elif t.tt >= (download.t_set + T_MAX).tt:
+
+	elif t.tt >= (download.t_set + processing_time_max).tt:
 		return 1.
+
 	# Replace this function with a different probability function if required.
 	return probability_event_linear_scale(
 		t,
-		download.t_set + T_MAX,
-		download.t_set + T_MIN
+		download.t_set + processing_time_max,
+		download.t_set + processing_time_min
 	)
 
 
 def prob_of_data_by_time(
 		image: Contact,
-		t_arrival: datetime,
 		downloads: List[Contact],
-		cloud: float,
+		t_arrival: datetime,
+		data_processing_time: List[float] = [T_MIN, T_MAX]
 ) -> float:
 	"""
-	Return probability that cloud-free data from an image event has arrived
-	:param image: Image object
-	:param t_arrival:
-	:param downloads: List of Download objects
-	:param cloud: fraction of cloud cover at time of image
-	:return:
-	"""
-	# The probability that the image even exist in the first place is the
-	# combined probability that it was both taken AND it was cloud-free. E.g. if there
-	# was an 80% chance of acquisition, and a 30% chance of it being cloud-free,
-	# then the chance of image existing is 0.8 * 0.3 = 0.24.
-	# This is the MAX probability that the data product arrives at the customer
-	prob_image_exists = (1. - cloud) * image.satellite.aq_prob
+	Return probability that cloud-free data, from an image event, has arrived.
 
+	:param image: Image object
+	:param downloads: List of Download objects
+	:param t_arrival: Datetime object by when the processed image must have arrived
+	:return: Probability of arrival
+	"""
 	downloads_ = [
 		d for d in downloads
 		if d.t_set.tt > image.t_peak.tt and d.satellite == image.satellite
@@ -149,41 +148,47 @@ def prob_of_data_by_time(
 	# then this would be 100%
 	total_prob_arr_via_download = 0
 	for k in range(min(MAX_DOWNLOADS_CONSIDERED, len(downloads_trimmed))):
-		prob_arrival_via_d = prob_arrival_via_download(t_arrival, downloads_trimmed[k])
-		total_prob_arr_via_download += DOWNLOAD_PROBABILITY[MAX_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
+
+		prob_arrival_via_d = prob_arrival_via_download(
+			t_arrival,
+			downloads_trimmed[k],
+			data_processing_time[0],
+			data_processing_time[1]
+		)
+
+		total_prob_arr_via_download += \
+			DOWNLOAD_PROBABILITY[MAX_DOWNLOADS_CONSIDERED][k] * prob_arrival_via_d
 
 	# Combine the probability of the image existing and the probability of it having
 	# arrived IF it were downloaded, to get the overall probability of
-	return prob_image_exists * total_prob_arr_via_download
+	return total_prob_arr_via_download
 
 
-def get_probability_of_no_image(
-		city,
-		images,
-		downloads,
-		cloud_threshold,
-		day0,
-		pre_epoch
+def probability_no_image_from_set(
+		images: List[Contact],
+		downloads: List[Contact],
+		day0: datetime,
+		cloud_data: Dict[float, float],
+		cloud_threshold: float = 1.0
 ) -> float:
 	"""Get the probability that NO image will have been received of a particular location"""
-	# Get cloud data for the city of interest during our time horizon
-	cloud_data = extract_cloud_data(f"weather//{city}.csv", pre_epoch, day0)
 	cumulative_probability_of_no_image = 1.
 	for image in images:
-		cloud_fraction = get_cloud_fraction_at_time(image.t_peak.tt, cloud_data)
 		# If the image is not captured during sunlight, skip
 		if 18 < image.t_peak.gast < 6:
 			continue
+
 		# If the image is deemed "too cloudy", skip
-		if cloud_fraction > cloud_threshold:
+		cloud = get_cloud_fraction_at_time(image.t_peak.tt, cloud_data)
+		if cloud > cloud_threshold:
 			continue
-		# Get the probability that the user will have data from this image by day0
-		prob = prob_of_data_by_time(
-			image,
-			day0,
-			downloads,
-			cloud_fraction
-		)
+
+		p_image_is_cloud_free = (1. - cloud) * image.satellite.aq_prob
+
+		p_image_delivered = prob_of_data_by_time(image, downloads, day0)
+
+		p_image_delivered_and_cloud_free = p_image_delivered * p_image_is_cloud_free
+
 		# Update probability that we'd have received NO image by this time
-		cumulative_probability_of_no_image *= 1 - prob
+		cumulative_probability_of_no_image *= 1 - p_image_delivered_and_cloud_free
 	return cumulative_probability_of_no_image

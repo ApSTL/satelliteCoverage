@@ -8,8 +8,9 @@ from typing import List, Dict, Union
 
 from classes import Location
 from space import get_spacecraft_from_epoch
-from data_movement import get_contact_events, get_probability_of_no_image
+from data_movement import get_contact_events, probability_no_image_from_set
 from ground import find_city_location, GROUND_STATIONS
+from cloud import extract_cloud_data
 
 
 def main(
@@ -64,15 +65,17 @@ def main(
 			get_contact_events(satellites, city_location, t_v0, t_final)
 		)
 
+		# Get cloud data for the city of interest during our time horizon
+		cloud_data = extract_cloud_data(f"weather//{city}.csv", t_v0, t_final)
+
 		# Given the set of images of this city, and the set of Download opportunities,
 		# find the probability that NO image is received by Day 0
-		no_image = get_probability_of_no_image(
-			city,
+		no_image = probability_no_image_from_set(
 			images,
 			downloads,
-			cloud_threshold,
 			t_final,
-			t_epoch
+			cloud_data,
+			cloud_threshold
 		)
 
 		# Get the TOTAL probability of having data insights of this target, but this time
