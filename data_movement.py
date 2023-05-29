@@ -1,6 +1,6 @@
 from datetime import datetime
 from math import degrees
-from typing import List, Dict
+from typing import List, Dict, Union
 
 from skyfield.api import load, utc
 
@@ -121,7 +121,7 @@ def prob_of_data_by_time(
 		image: Contact,
 		downloads: List[Contact],
 		t_arrival: datetime,
-		data_processing_time: List[float] = [T_MIN, T_MAX]
+		data_processing_time: Union[List[float], None] = None
 ) -> float:
 	"""
 	Return probability that cloud-free data, from an image event, has arrived.
@@ -129,8 +129,13 @@ def prob_of_data_by_time(
 	:param image: Image object
 	:param downloads: List of Download objects
 	:param t_arrival: Datetime object by when the processed image must have arrived
+	:param data_processing_time: List of length 2, containing the minimum and maximum
+		processing times
 	:return: Probability of arrival
 	"""
+	if not data_processing_time:
+		data_processing_time = [T_MIN, T_MAX]
+
 	downloads_ = [
 		d for d in downloads
 		if d.t_set.tt > image.t_peak.tt and d.satellite == image.satellite
