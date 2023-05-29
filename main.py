@@ -30,10 +30,6 @@ def main(
 	:param cloud_threshold: [float] Maximum fraction of cloud cover before an image is 
 		considered to be of zero value and, therefore, not included in analysis
 	"""
-
-	# Check to make sure we have weather information for each of the requested cities
-
-
 	# Define the date and time from which we want to extract TLE data. This should be
 	# early enough such that we can be sure not to miss the epoch (i.e. earliest time
 	# of interest), considering that there can be gaps in TLE data of a couple of days.
@@ -66,7 +62,12 @@ def main(
 		)
 
 		# Get cloud data for the city of interest during our time horizon
-		cloud_data = extract_cloud_data(f"weather//{city}.csv", t_v0, t_final)
+		# TODO this should be handled using logic, rather than simply a try-except clause
+		try:
+			cloud_data = extract_cloud_data(f"weather//{city}.csv", t_v0, t_final)
+		except:
+			probabilities[city] = "No weather available"
+			continue
 
 		# Given the set of images of this city, and the set of Download opportunities,
 		# find the probability that NO image is received by Day 0
@@ -85,7 +86,7 @@ def main(
 
 if __name__ == "__main__":
 	# NOTE: This must match the name of the city in the lat-lon CSV
-	cities_input = ["Denver", "New York", "Los Angeles"]
+	cities_input = ["Denver", "New York", "Los Angeles", "London"]
 	t_f = datetime(2022, 11, 7, 5, 0, 0)
 	image_max_age = 1  # Maximum age (in days) an image is considered of value
 	probabilities_all_cities = main(cities_input, t_f, image_max_age)
