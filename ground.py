@@ -1,16 +1,5 @@
 import csv
 
-from classes import Location
-
-
-# Define the Ground Stations to which images are downloaded
-GROUND_STATIONS = [
-	Location("Yukon", (69.588837, -139.048477)),  # Estimated position
-	Location("North Dakota", (48.412949, -97.487445)),  # Estimated position
-	Location("Iceland", (64.872589, -22.379039)),  # Estimated position
-	Location("Awarura", (-46.528890, 168.381881)),
-]
-
 
 def find_city_location(
 		city_name: str,

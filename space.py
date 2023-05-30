@@ -21,7 +21,7 @@ PLATFORM_ATTRIBS = {
 		"FLOCK": 1.0,
 		"SKYSAT": 0.1
 	}
-	}
+}
 
 
 # TODO Not currently used, but was added in as a way to perhaps better dictate which
