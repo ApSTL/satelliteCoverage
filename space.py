@@ -164,6 +164,7 @@ def get_spacecraft_from_epoch(
 		spacecraft_all.append(Spacecraft(
 			satellite,
 			[  # Field of regard (half angle, radians)
+				# we are associating all keys in PLATFORM_ATTRIBS["for"] with 'x' and then itterating over them
 				PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
 				if x in satellite.name
 			][0],
