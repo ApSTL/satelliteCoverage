@@ -1,9 +1,10 @@
 import csv
 
-
+# Josh - changed filepath to file with every city in the world rather than just USA
 def find_city_location(
 		city_name: str,
-		filepath: str = "lat_lon_data/uscities_lat_lng.csv"
+		#filepath: str = "lat_lon_data/uscities_lat_lng.csv"
+		filepath: str = "lat_lon_data/worldcities.csv"
 ) -> tuple:
 	"""
 	Return a location object (lat lon) for a named city (city must be in the CSV).
