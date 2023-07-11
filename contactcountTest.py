@@ -14,8 +14,8 @@ from ground import find_city_location
 from cloud import get_cloud_fraction_at_time, extract_cloud_data
 
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
-#Targets = ["Solway firth", "Madrid", "Bobo-Dioulasso", "Vilnius"]
-Targets = ["Denver", "New York", "Los Angeles", "London"]
+Targets = ["Solway firth", "Madrid", "Bobo-Dioulasso", "Vilnius"]
+#Targets = ["Denver", "New York", "Los Angeles", "London"]
 
 # Start/End dates of the search
 start = datetime(2022, 1, 1, 0, 0, 0)
@@ -27,7 +27,7 @@ platform="sentinel2"
 R_E = 6371000.8  # Mean Earth radius
 
 
-# Attributes Dictionary.
+# Contstellation Attributes Dictionary.
 PLATFORM_ATTRIBS = {
 	"for": {  # Field of regard (half-angle)
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
@@ -74,11 +74,19 @@ for satellite_id, satellite in satellites.items():
 
 # For each target, determine how many contacts there were from the TLE data
 contacts = []
+
+contact_num={}
+
 for target in Targets:
-    target_location=Location(target, find_city_location(target, "lat_lon_data/uscities_lat_lng.csv"))
+    #target_location=Location(target, find_city_location(target, "lat_lon_data/uscities_lat_lng.csv"))
+    target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
+    Targetcontact_num={}
     
     # For each satellite<>location pair, get all contact events during the horizon
-    for s in satellites:
+    for s in spacecraft_all:
+    
+        contact_count=0
+        
         t0_ts = load.timescale().from_datetime(start.astimezone(utc))
         t1_ts = load.timescale().from_datetime(end.astimezone(utc))
         
@@ -87,34 +95,35 @@ for target in Targets:
         elev_angle = degrees(for_elevation_from_half_angle(
 			s.for_,s.satellite.model.altp * R_E))
         
-    # Get the rise, culmination and fall for all passes between this
-	# satellite:target pair during the time horizon
-
-    
-    		t, events = s.satellite.find_events(
-			target_location.location, t0_ts, t1_ts, altitude_degrees=elev_angle)
-     
-		# Pre-set the
-		t_rise = t0_ts
-		t_peak = t0_ts
-    
-		for ti, event in zip(t, events):
-			# If the event is 0 (i.e. "rise"), store the rise event, else if it's
-			# 0 (i.e. "culmination"), continue
-			if event == 0:  # If this is a Rise event, set the rise time
-				t_rise = ti
-				continue
-			if event == 1:  # if this is a Peak event, skip
-				t_peak = ti
-				continue
-			# So long as a rise time has been defined, instantiate the Download event
-			contacts.append(Contact(s, target_location, t_rise, t_peak, ti))
-      
-      
-  
-
-# Pretty print the outputs
+        t, events = s.satellite.find_events(
+			target_location.location, t0_ts,t1_ts, altitude_degrees=elev_angle)
+        # Pre-set times
+        t_rise = start
+        t_peak= start
+        
+        for ti, event in zip(t, events):
+            # if event is 0, it is a rise event, 1 is a peak. If it's neither, instantiate
+            if event == 0:
+                t_rise = ti
+                continue
+            if event == 1:
+                t_peak = ti
+                continue
+            # As long as a rise is defined, Instantiate event
+            contacts.append(Contact(s, target_location, t_rise, t_peak, ti))
+            contact_count+=1
+        
+        Targetcontact_num[s.satellite.name]=contact_count
+        
+    contact_num[target]=Targetcontact_num
+            
+            
+            
 print(f"Number of possible cloud-free images between {start_string} and {end_string}:")
-
-#for city, prob in probabilities_all_cities.items():
-	#print(f"-> {city}: {prob}")
+for target in contact_num:
+    print(f"==> {target}")
+    for sat, num in contact_num[target].items():
+     print(f"->{sat} = {num}")
+    
+    print(f"")
+ 
