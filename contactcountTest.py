@@ -1,25 +1,19 @@
 import os
-from datetime import datetime, timedelta
-from typing import List, Dict, Union
+from datetime import datetime
 
-from skyfield.api import load, utc, Timescale, EarthSatellite
-from space_track_api_script import space_track_api_request
-
-from math import acos, sin, pi, radians, sqrt, cos, asin, degrees
-from numpy import sign
+from skyfield.api import load, utc
+from math import radians, degrees
 from classes import Location, Spacecraft, Contact
-from space import get_spacecraft_from_epoch, fetch_tle_and_write_to_txt, for_elevation_from_half_angle
-from data_movement import get_contact_events, probability_no_image_from_set
+from space import  fetch_tle_and_write_to_txt, for_elevation_from_half_angle
 from ground import find_city_location
-from cloud import get_cloud_fraction_at_time, extract_cloud_data
 
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
 Targets = ["Solway firth", "Madrid", "Bobo-Dioulasso", "Vilnius"]
 #Targets = ["Denver", "New York", "Los Angeles", "London"]
 
 # Start/End dates of the search
-start = datetime(2022, 1, 1, 0, 0, 0)
-end = datetime(2023, 1, 1, 0, 0, 0)
+start = datetime(2021, 1, 1, 0, 0, 0)
+end = datetime(2022, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -31,9 +25,9 @@ R_E = 6371000.8  # Mean Earth radius
 PLATFORM_ATTRIBS = {
 	"for": {  # Field of regard (half-angle)
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
-		# TODO Update to be realistic
+		# TODO Update to be realistic, currently using Sentinel 2 FOV (from Roy et al)
 		"SKYSAT": radians(30.),
-		"SENTINEL 2": radians(1.5)
+		"SENTINEL 2": radians(20.6)
 	},
 	"aq_prob": {  # probability that imaging opportunity results in capture
 		# TODO Update to be realistic
@@ -75,7 +69,7 @@ for satellite_id, satellite in satellites.items():
 # For each target, determine how many contacts there were from the TLE data
 contacts = []
 
-contact_num={}
+contact_per_sat={}
 
 for target in Targets:
     #target_location=Location(target, find_city_location(target, "lat_lon_data/uscities_lat_lng.csv"))
@@ -115,15 +109,13 @@ for target in Targets:
         
         Targetcontact_num[s.satellite.name]=contact_count
         
-    contact_num[target]=Targetcontact_num
-            
-            
-            
-print(f"Number of possible cloud-free images between {start_string} and {end_string}:")
-for target in contact_num:
+    contact_per_sat[target]=Targetcontact_num
+
+# Print total contacts
+print(f"Number of image opportunities between {start_string} and {end_string}:")
+for target in contact_per_sat:
     print(f"==> {target}")
-    for sat, num in contact_num[target].items():
+    for sat, num in contact_per_sat[target].items():
      print(f"->{sat} = {num}")
-    
     print(f"")
- 
+    
