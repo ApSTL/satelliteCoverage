@@ -1,6 +1,9 @@
 import os
+import numpy as np
+
 from datetime import datetime
 
+from netCDF4 import Dataset
 from skyfield.api import load, utc
 from math import radians, degrees
 from classes import Location, Spacecraft, Contact
@@ -27,7 +30,7 @@ PLATFORM_ATTRIBS = {
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
 		# TODO Update to be realistic, currently using Sentinel 2 FOV (from Roy et al)
 		"SKYSAT": radians(30.),
-		"SENTINEL 2": radians(20.6)
+		"SENTINEL 2": radians(10.707)
 	},
 	"aq_prob": {  # probability that imaging opportunity results in capture
 		# TODO Update to be realistic
@@ -110,6 +113,39 @@ for target in Targets:
         Targetcontact_num[s.satellite.name]=contact_count
         
     contact_per_sat[target]=Targetcontact_num
+
+# now that we have all the contacts, get the cloud fraction at these times...
+# Astrids code, slightly altered
+for c in contacts:
+    contact_year= c.t_rise.utc_strftime('%Y')
+    contact_date= c.t_rise.utc_strftime('%Y%m%d')
+
+    nc_f = f"Global_Cloud_Data_{contact_year}//CFCdm{contact_date}000040019AVPOS01GL.nc"  # Your filename
+    nc_fid = Dataset(nc_f, 'r')  # Dataset is the class behavior to open the file and create an instance of the ncCDF4 class
+
+    lats = nc_fid.variables['lat'][:]  # extract/copy the data
+    lons = nc_fid.variables['lon'][:]
+
+    cfc = nc_fid.variables['cfc'][:]
+
+    lat = c.location.latitude.degrees
+    lon = c.location.longitude.degrees
+
+    minlat = lat - 0.5
+    maxlat = lat + 0.5
+
+    minlon = lon - 0.5
+    maxlon = lon + 0.5
+
+    indlat = np.where((lats < maxlat) & (lats > minlat))
+    indlon = np.where((lons < maxlon) & (lons > minlon))
+
+    cfc_day = np.mean(cfc[0,indlat[:],indlon[:]])
+
+
+
+
+
 
 # Print total contacts
 print(f"Number of image opportunities between {start_string} and {end_string}:")
