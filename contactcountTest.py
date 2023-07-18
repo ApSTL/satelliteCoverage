@@ -1,18 +1,19 @@
 import os
-import numpy as np
 
 from datetime import datetime
 
-from netCDF4 import Dataset
+from Astrid import get_cloud_fraction_from_nc
 from skyfield.api import load, utc
 from math import radians, degrees
 from classes import Location, Spacecraft, Contact
 from space import  fetch_tle_and_write_to_txt, for_elevation_from_half_angle
 from ground import find_city_location
 
+# Most of the code taken from chris's scripts and adapted. Also adapted some code from Astrid.
+
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
-Targets = ["Solway firth", "Madrid", "Bobo-Dioulasso", "Vilnius"]
-#Targets = ["Denver", "New York", "Los Angeles", "London"]
+Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
+cloud_threshold = 10
 
 # Start/End dates of the search
 start = datetime(2021, 1, 1, 0, 0, 0)
@@ -72,18 +73,17 @@ for satellite_id, satellite in satellites.items():
 # For each target, determine how many contacts there were from the TLE data
 contacts = []
 
-contact_per_sat={}
+contact_per_tar={}
 
 for target in Targets:
     #target_location=Location(target, find_city_location(target, "lat_lon_data/uscities_lat_lng.csv"))
     target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
     Targetcontact_num={}
+    contact_count=0
     
     # For each satellite<>location pair, get all contact events during the horizon
     for s in spacecraft_all:
     
-        contact_count=0
-        
         t0_ts = load.timescale().from_datetime(start.astimezone(utc))
         t1_ts = load.timescale().from_datetime(end.astimezone(utc))
         
@@ -107,51 +107,32 @@ for target in Targets:
                 t_peak = ti
                 continue
             # As long as a rise is defined, Instantiate event
-            contacts.append(Contact(s, target_location, t_rise, t_peak, ti))
+            newContact=Contact(s, target_location, t_rise, t_peak, ti)
+            # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
+            cf=get_cloud_fraction_from_nc(newContact)
+            if cf > cloud_threshold:
+                continue
+        
+            contacts.append(newContact)
             contact_count+=1
         
-        Targetcontact_num[s.satellite.name]=contact_count
+        #Targetcontact_num[s.satellite.name]=contact_count
         
-    contact_per_sat[target]=Targetcontact_num
-
-# now that we have all the contacts, get the cloud fraction at these times...
-# Astrids code, slightly altered
-for c in contacts:
-    contact_year= c.t_rise.utc_strftime('%Y')
-    contact_date= c.t_rise.utc_strftime('%Y%m%d')
-
-    nc_f = f"Global_Cloud_Data_{contact_year}//CFCdm{contact_date}000040019AVPOS01GL.nc"  # Your filename
-    nc_fid = Dataset(nc_f, 'r')  # Dataset is the class behavior to open the file and create an instance of the ncCDF4 class
-
-    lats = nc_fid.variables['lat'][:]  # extract/copy the data
-    lons = nc_fid.variables['lon'][:]
-
-    cfc = nc_fid.variables['cfc'][:]
-
-    lat = c.location.latitude.degrees
-    lon = c.location.longitude.degrees
-
-    minlat = lat - 0.5
-    maxlat = lat + 0.5
-
-    minlon = lon - 0.5
-    maxlon = lon + 0.5
-
-    indlat = np.where((lats < maxlat) & (lats > minlat))
-    indlon = np.where((lons < maxlon) & (lons > minlon))
-
-    cfc_day = np.mean(cfc[0,indlat[:],indlon[:]])
+    contact_per_tar[target]=contact_count
 
 
-
+# Print total contacts
+print(f"Number of possible images with <={cloud_threshold}% cloud cover between {start_string} and {end_string}:")
+for target, num in contact_per_tar.items():
+    print(f"==> {target} = {num}")
 
 
 
 # Print total contacts
-print(f"Number of image opportunities between {start_string} and {end_string}:")
-for target in contact_per_sat:
-    print(f"==> {target}")
-    for sat, num in contact_per_sat[target].items():
-     print(f"->{sat} = {num}")
-    print(f"")
+#print(f"Number of possible images with <={cloud_threshold}% cloud cover between {start_string} and {end_string}:")
+#for target in contact_per_sat:
+#    print(f"==> {target}")
+#    for sat, num in contact_per_sat[target].items():
+#     print(f"->{sat} = {num}")
+#    print(f"")
     
