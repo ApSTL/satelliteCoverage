@@ -3,7 +3,7 @@ from netCDF4 import Dataset
 import numpy as np
 
 # Astrids code, just making it into a function
-def get_cloud_fraction_from_nc(
+def get_cloud_fraction_from_nc_file(
     c: Contact,    
 ) ->float:
 

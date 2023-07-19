@@ -13,7 +13,7 @@ from ground import find_city_location
 
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
 Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
-cloud_threshold = 10
+cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
 start = datetime(2021, 1, 1, 0, 0, 0)
@@ -79,6 +79,9 @@ for target in Targets:
     #target_location=Location(target, find_city_location(target, "lat_lon_data/uscities_lat_lng.csv"))
     target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
     Targetcontact_num={}
+    for i in cloud_thresholds:
+        Targetcontact_num[i]=0
+    
     contact_count=0
     
     # For each satellite<>location pair, get all contact events during the horizon
@@ -110,29 +113,30 @@ for target in Targets:
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
             cf=get_cloud_fraction_from_nc(newContact)
-            if cf > cloud_threshold:
-                continue
+            for ct in cloud_thresholds:
+                
+                if cf > ct:
+                    continue
+                
+                Targetcontact_num[ct]+=1
         
             contacts.append(newContact)
-            contact_count+=1
         
-        #Targetcontact_num[s.satellite.name]=contact_count
-        
-    contact_per_tar[target]=contact_count
-
-
-# Print total contacts
-print(f"Number of possible images with <={cloud_threshold}% cloud cover between {start_string} and {end_string}:")
-for target, num in contact_per_tar.items():
-    print(f"==> {target} = {num}")
-
+    contact_per_tar[target]=Targetcontact_num
 
 
 # Print total contacts
 #print(f"Number of possible images with <={cloud_threshold}% cloud cover between {start_string} and {end_string}:")
-#for target in contact_per_sat:
-#    print(f"==> {target}")
-#    for sat, num in contact_per_sat[target].items():
-#     print(f"->{sat} = {num}")
-#    print(f"")
+#for target, num in contact_per_tar.items():
+#    print(f"==> {target} = {num}")
+
+
+
+# Print total contacts
+print(f"Number of possible images with cloud cover less than threshold between {start_string} and {end_string}:")
+for target in contact_per_tar:
+    print(f"==> {target}")
+    for ct, num in contact_per_tar[target].items():
+     print(f"<={ct}% = {num}")
+    print(f"")
     
