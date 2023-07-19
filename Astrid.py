@@ -11,6 +11,11 @@ def get_cloud_fraction_from_nc_file(
     contact_date= c.t_rise.utc_strftime('%Y%m%d')
 
     nc_f = f"Global_Cloud_Data_{contact_year}/CFCdm{contact_date}000040019AVPOS01GL.nc"  # Your filename
+
+    # 2018 file names are different, not sure why
+    if contact_year=='2018':
+        nc_f = f"Global_Cloud_Data_{contact_year}/CFCdm{contact_date}000000219AVPOSE1GL.nc"  # Your filename
+
     nc_fid = Dataset(nc_f, 'r')  # Dataset is the class behavior to open the file and create an instance of the ncCDF4 class
 
     lats = nc_fid.variables['lat'][:]  # extract/copy the data
@@ -21,11 +26,11 @@ def get_cloud_fraction_from_nc_file(
     lat = c.target.location.latitude.degrees
     lon = c.target.location.longitude.degrees
 
-    minlat = lat - 0.2
-    maxlat = lat + 0.2
+    minlat = lat - 0.02
+    maxlat = lat + 0.02
 
-    minlon = lon - 0.2
-    maxlon = lon + 0.2
+    minlon = lon - 0.02
+    maxlon = lon + 0.02
 
     indlat = np.where((lats < maxlat) & (lats > minlat))
     indlon = np.where((lons < maxlon) & (lons > minlon))

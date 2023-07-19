@@ -16,8 +16,8 @@ Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
 cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
-start = datetime(2019, 1, 1, 0, 0, 0)
-end = datetime(2020, 1, 1, 0, 0, 0)
+start = datetime(2018, 1, 1, 0, 0, 0)
+end = datetime(2019, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -75,7 +75,6 @@ contacts = []
 contact_per_tar={}
 
 # for each target, run through each spacecraft and find each contact event.
-# TODO determine if the contact resulted in an image.
 # run through each cloud fraction threshold and count the contacts that meet them.
 for target in Targets:
     target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
