@@ -70,19 +70,18 @@ for satellite_id, satellite in satellites.items():
 		][0]
 	))      
 
-# For each target, determine how many contacts there were from the TLE data
+# Initialise a list of contacts and disctionary for storing results
 contacts = []
-
 contact_per_tar={}
 
+# for each target, run through each spacecraft and find each contact event.
+# TODO determine if the contact resulted in an image.
+# run through each cloud fraction threshold and count the contacts that meet them.
 for target in Targets:
-    #target_location=Location(target, find_city_location(target, "lat_lon_data/uscities_lat_lng.csv"))
     target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
     Targetcontact_num={}
     for i in cloud_thresholds:
         Targetcontact_num[i]=0
-    
-    contact_count=0
     
     # For each satellite<>location pair, get all contact events during the horizon
     for s in spacecraft_all:
@@ -123,14 +122,6 @@ for target in Targets:
             contacts.append(newContact)
         
     contact_per_tar[target]=Targetcontact_num
-
-
-# Print total contacts
-#print(f"Number of possible images with <={cloud_threshold}% cloud cover between {start_string} and {end_string}:")
-#for target, num in contact_per_tar.items():
-#    print(f"==> {target} = {num}")
-
-
 
 # Print total contacts
 print(f"Number of possible images with cloud cover less than threshold between {start_string} and {end_string}:")
