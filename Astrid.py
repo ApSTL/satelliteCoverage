@@ -26,11 +26,11 @@ def get_cloud_fraction_from_nc_file(
     lat = c.target.location.latitude.degrees
     lon = c.target.location.longitude.degrees
 
-    minlat = lat - 0.02
-    maxlat = lat + 0.02
+    minlat = lat - 0.2
+    maxlat = lat + 0.2
 
-    minlon = lon - 0.02
-    maxlon = lon + 0.02
+    minlon = lon - 0.2
+    maxlon = lon + 0.2
 
     indlat = np.where((lats < maxlat) & (lats > minlat))
     indlon = np.where((lons < maxlon) & (lons > minlon))
