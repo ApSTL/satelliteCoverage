@@ -2,6 +2,7 @@ import os
 
 from datetime import datetime
 
+
 from Astrid import get_cloud_fraction_from_nc_file
 from skyfield.api import load, utc
 from math import radians, degrees
@@ -9,11 +10,14 @@ from classes import Location, Spacecraft, Contact
 from space import  fetch_tle_and_write_to_txt, for_elevation_from_half_angle
 from ground import find_city_location
 
-# Most of the code taken from chris's scripts and adapted. Also adapted some code from Astrid.
+# NOTE: A lot of the code is patched together from chris's scripts and adapted. Also adapted some code from Astrid.
+# The script gathers TLE data from a constellation during the given timeframe... 
+# isolates each satellite then determines all contacts with a series of ground lat/longs...
+# the date of each contact is then compared with daily averaged cloud data to determine the probability that the image is cloud free.
 
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
 Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
-cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
 start = datetime(2018, 1, 1, 0, 0, 0)
@@ -31,7 +35,7 @@ PLATFORM_ATTRIBS = {
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
 		# TODO Update to be realistic, currently using Sentinel 2 FOV (from Roy et al)
 		"SKYSAT": radians(30.),
-		"SENTINEL 2": radians(10.707)
+		"SENTINEL 2": radians(10.3)
 	},
 	"aq_prob": {  # probability that imaging opportunity results in capture
 		# TODO Update to be realistic
@@ -78,8 +82,9 @@ contact_per_tar={}
 # run through each cloud fraction threshold and count the contacts that meet them.
 for target in Targets:
     target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
+    
     Targetcontact_num={}
-    for i in cloud_thresholds:
+    for i in prob_thresholds:
         Targetcontact_num[i]=0
     
     # For each satellite<>location pair, get all contact events during the horizon
@@ -101,32 +106,45 @@ for target in Targets:
         
         for ti, event in zip(t, events):
             # if event is 0, it is a rise event, 1 is a peak. If it's neither, instantiate
+
             if event == 0:
                 t_rise = ti
                 continue
             if event == 1:
                 t_peak = ti
                 continue
+            
+            # TODO include day/night differentiation
+ 
             # As long as a rise is defined, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
             cf=get_cloud_fraction_from_nc_file(newContact)
-            for ct in cloud_thresholds:
+            prob_cloud_free=100-cf
+            
+            for pt in prob_thresholds:
                 
-                if cf > ct:
+                if prob_cloud_free > pt:
                     continue
                 
-                Targetcontact_num[ct]+=1
+                Targetcontact_num[pt]+=1
         
             contacts.append(newContact)
         
     contact_per_tar[target]=Targetcontact_num
 
 # Print total contacts
-print(f"Number of possible images with cloud cover less than threshold between {start_string} and {end_string}:")
+print(f"Number of images with probability of being cloud free between {start_string} and {end_string}:")
 for target in contact_per_tar:
     print(f"==> {target}")
-    for ct, num in contact_per_tar[target].items():
-     print(f"<={ct}% = {num}")
+    prev_pt=0
+    prev_num=0
+    
+    for pt, num in contact_per_tar[target].items():
+     print(f"{prev_pt}-{pt}% = {num-prev_num}")
+     prev_pt=pt
+     prev_num=num
+     
+    print(f"Total = {num}")
     print(f"")
     
