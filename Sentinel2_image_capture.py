@@ -106,6 +106,8 @@ for target in Targets:
         t_peak= start
         
         for ti, event in zip(t, events):
+            day_night=bool()
+            
             # if event is 0, it is a rise event, 1 is a peak. If it's neither, instantiate
             if event == 0:
                 t_rise = ti
@@ -130,7 +132,9 @@ for target in Targets:
             sunrise=sun.get_sunrise_time(ImageTime)
             sunset=sun.get_sunset_time(ImageTime)
             
-            if ImageTime<sunrise or ImageTime>sunset:
+            day_night=ImageTime>sunrise and ImageTime<sunset
+            
+            if day_night==False:
                 continue
             
             
@@ -157,3 +161,6 @@ for target in contact_per_tar:
      print(f"<={ct}% = {num}")
     print(f"")
     
+    
+# for contact in contacts:
+#     print(f'UTC location and date:{contact.target.name} - {contact.t_peak.utc}')

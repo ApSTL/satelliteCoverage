@@ -172,5 +172,5 @@ for target in contact_per_tar:
     print(f"Total = {num}")
     print(f"")
     
-# for contact in contacts:
-#     print('UTC date and time:', contact.t_peak.utc)
+for contact in contacts:
+    print('UTC date and time:', contact.t_peak.utc)
