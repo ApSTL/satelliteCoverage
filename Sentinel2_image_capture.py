@@ -115,7 +115,7 @@ for target in Targets:
                 continue
             
             # TODO include day/night differentiation
- 
+            
             # As long as a rise is defined, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
