@@ -139,14 +139,9 @@ for target in Targets:
             if ImageTime<sunrise or ImageTime>sunset:
                 continue
             
-            
-            
-            
             # As long as a rise is defined, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
-            
-
-
+   
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
             cf=get_cloud_fraction_from_nc_file(newContact)
             prob_cloud_free=100-cf
