@@ -1,7 +1,7 @@
 import os
 
 from datetime import datetime
-
+from suntime import Sun
 from Astrid import get_cloud_fraction_from_nc_file
 from skyfield.api import load, utc
 from math import radians, degrees
@@ -82,6 +82,12 @@ for target in Targets:
     for i in cloud_thresholds:
         Targetcontact_num[i]=0
     
+    # initialise sun for the target location
+    lat=target_location.location.latitude.degrees
+    lon=target_location.location.longitude.degrees
+    
+    sun= Sun(lat, lon)
+    
     # For each satellite<>location pair, get all contact events during the horizon
     for s in spacecraft_all:
     
@@ -107,6 +113,27 @@ for target in Targets:
             if event == 1:
                 t_peak = ti
                 continue
+            
+            # If peak contact occurs before sunrise or after sunset, ignore it.
+            # clunky but only way i can get this to work for now
+            ContactTime=t_peak.utc
+            year=int(ContactTime.year)
+            month=int(ContactTime.month)
+            day=int(ContactTime.day)
+            hour= int(ContactTime.hour)
+            minute= int(ContactTime.minute)
+            second=int(ContactTime.second)
+            
+            ImageTime=datetime(year,month,day,hour,minute,second).astimezone(utc)
+           
+            # imageTime=datetime.time()
+            sunrise=sun.get_sunrise_time(ImageTime)
+            sunset=sun.get_sunset_time(ImageTime)
+            
+            if ImageTime<sunrise or ImageTime>sunset:
+                continue
+            
+            
             # As long as a rise is defined, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
