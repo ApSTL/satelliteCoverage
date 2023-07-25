@@ -2,7 +2,7 @@ import os
 
 from datetime import datetime
 
-
+from suntime import Sun
 from Astrid import get_cloud_fraction_from_nc_file
 from skyfield.api import load, utc
 from math import radians, degrees
@@ -83,6 +83,12 @@ contact_per_tar={}
 for target in Targets:
     target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
     
+    # initialise sun for the target location
+    lat=target_location.location.latitude.degrees
+    lon=target_location.location.longitude.degrees
+    
+    sun= Sun(lat, lon)
+
     Targetcontact_num={}
     for i in prob_thresholds:
         Targetcontact_num[i]=0
@@ -114,10 +120,33 @@ for target in Targets:
                 t_peak = ti
                 continue
             
-            # TODO include day/night differentiation
+            # If peak contact occurs before sunrise or after sunset, ignore it.
+            # clunky but only way i can get this to work for now
+            ContactTime=t_peak.utc
+            year=int(ContactTime.year)
+            month=int(ContactTime.month)
+            day=int(ContactTime.day)
+            hour= int(ContactTime.hour)
+            minute= int(ContactTime.minute)
+            second=int(ContactTime.second)
+            
+            ImageTime=datetime(year,month,day,hour,minute,second).astimezone(utc)
+           
+            # imageTime=datetime.time()
+            sunrise=sun.get_sunrise_time(ImageTime)
+            sunset=sun.get_sunset_time(ImageTime)
+            
+            if ImageTime<sunrise or ImageTime>sunset:
+                continue
+            
+            
+            
             
             # As long as a rise is defined, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
+            
+
+
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
             cf=get_cloud_fraction_from_nc_file(newContact)
             prob_cloud_free=100-cf
@@ -134,7 +163,7 @@ for target in Targets:
     contact_per_tar[target]=Targetcontact_num
 
 # Print total contacts
-print(f"Number of images with probability of being cloud free between {start_string} and {end_string}:")
+# print(f"Number of images with probability of being cloud free between {start_string} and {end_string}:")
 for target in contact_per_tar:
     print(f"==> {target}")
     prev_pt=0
@@ -148,3 +177,5 @@ for target in contact_per_tar:
     print(f"Total = {num}")
     print(f"")
     
+# for contact in contacts:
+#     print('UTC date and time:', contact.t_peak.utc)
