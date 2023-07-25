@@ -121,7 +121,7 @@ for target in Targets:
                 continue
             
             # If peak contact occurs before sunrise or after sunset, ignore it.
-            # clunky but only way i can get this to work for now
+            # clunky but only way i can get this to work for now (numpy64 error)
             ContactTime=t_peak.utc
             year=int(ContactTime.year)
             month=int(ContactTime.month)
