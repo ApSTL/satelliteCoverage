@@ -16,8 +16,8 @@ Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
 cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
-start = datetime(2018, 1, 1, 0, 0, 0)
-end = datetime(2019, 1, 1, 0, 0, 0)
+start = datetime(2021, 1, 1, 0, 0, 0)
+end = datetime(2022, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -128,18 +128,17 @@ for target in Targets:
             
             ImageTime=datetime(year,month,day,hour,minute,second).astimezone(utc)
            
-            # imageTime=datetime.time()
             sunrise=sun.get_sunrise_time(ImageTime)
             sunset=sun.get_sunset_time(ImageTime)
             
-            day_night=ImageTime>sunrise and ImageTime<sunset
+            daytime=ImageTime>sunrise and ImageTime<sunset
             
-            if day_night==False:
+            if daytime==False:
                 continue
             
-            
-            # As long as a rise is defined, Instantiate event
+            # If rise and peak are defined AND they happened in the daytime, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
+            
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
             cf=get_cloud_fraction_from_nc_file(newContact)
             for ct in cloud_thresholds:
@@ -161,6 +160,3 @@ for target in contact_per_tar:
      print(f"<={ct}% = {num}")
     print(f"")
     
-    
-# for contact in contacts:
-#     print(f'UTC location and date:{contact.target.name} - {contact.t_peak.utc}')
