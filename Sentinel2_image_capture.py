@@ -16,8 +16,8 @@ Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
 cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
-start = datetime(2018, 1, 1, 0, 0, 0)
-end = datetime(2019, 1, 1, 0, 0, 0)
+start = datetime(2021, 1, 1, 0, 0, 0)
+end = datetime(2022, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -31,7 +31,7 @@ PLATFORM_ATTRIBS = {
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
 		# TODO Update to be realistic, currently using Sentinel 2 FOV (from Roy et al)
 		"SKYSAT": radians(30.),
-		"SENTINEL 2": radians(10.707)
+		"SENTINEL 2": radians(10.3)
 	},
 	"aq_prob": {  # probability that imaging opportunity results in capture
 		# TODO Update to be realistic

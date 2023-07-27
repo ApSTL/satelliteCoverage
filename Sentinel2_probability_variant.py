@@ -20,8 +20,8 @@ Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
 prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
-start = datetime(2018, 1, 1, 0, 0, 0)
-end = datetime(2019, 1, 1, 0, 0, 0)
+start = datetime(2020, 1, 1, 0, 0, 0)
+end = datetime(2021, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -172,5 +172,5 @@ for target in contact_per_tar:
     print(f"Total = {num}")
     print(f"")
     
-for contact in contacts:
-    print('UTC date and time:', contact.t_peak.utc)
+# for contact in contacts:
+#     print('UTC date and time:', contact.t_peak.utc)
