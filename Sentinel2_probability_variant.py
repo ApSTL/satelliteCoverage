@@ -132,14 +132,15 @@ for target in Targets:
             
             ImageTime=datetime(year,month,day,hour,minute,second).astimezone(utc)
            
-            # imageTime=datetime.time()
             sunrise=sun.get_sunrise_time(ImageTime)
             sunset=sun.get_sunset_time(ImageTime)
             
-            if ImageTime<sunrise or ImageTime>sunset:
-                continue
+            daytime=ImageTime>sunrise and ImageTime<sunset
             
-            # As long as a rise is defined, Instantiate event
+            if daytime==False:
+                continue
+
+            # If rise and peak are defined AND they happened in the daytime, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
    
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
