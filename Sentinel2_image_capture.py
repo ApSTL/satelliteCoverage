@@ -16,8 +16,8 @@ Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
 cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
-start = datetime(2021, 1, 1, 0, 0, 0)
-end = datetime(2022, 1, 1, 0, 0, 0)
+start = datetime(2020, 1, 1, 0, 0, 0)
+end = datetime(2021, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -70,9 +70,13 @@ for satellite_id, satellite in satellites.items():
 		][0]
 	))      
 
-# Initialise a list of contacts and disctionary for storing results
-contacts = []
+# Initialise a list of contacts and dictionary for storing results
+Totalcontacts = []
+daycontacts = []
 contact_per_tar={}
+
+cf_allmean={}
+cf_daymean={}
 
 # for each target, run through each spacecraft and find each contact event.
 # run through each cloud fraction threshold and count the contacts that meet them.
@@ -82,6 +86,10 @@ for target in Targets:
     for i in cloud_thresholds:
         Targetcontact_num[i]=0
     
+    cf_alltotal=0
+    cf_daytotal=0
+    allcontactCount=0
+
     # initialise sun for the target location
     lat=target_location.location.latitude.degrees
     lon=target_location.location.longitude.degrees
@@ -116,6 +124,14 @@ for target in Targets:
                 t_peak = ti
                 continue
             
+            newContact=Contact(s, target_location, t_rise, t_peak, ti)
+            Totalcontacts.append(newContact)
+            allcontactCount+=1
+
+            # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
+            cf=get_cloud_fraction_from_nc_file(newContact)
+            cf_alltotal=cf_alltotal+cf
+
             # If peak contact occurs before sunrise or after sunset, ignore it.
             # clunky but only way i can get this to work for now
             ContactTime=t_peak.utc
@@ -137,10 +153,11 @@ for target in Targets:
                 continue
             
             # If rise and peak are defined AND they happened in the daytime, Instantiate event
-            newContact=Contact(s, target_location, t_rise, t_peak, ti)
+            usefulContact=newContact
             
-            # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
-            cf=get_cloud_fraction_from_nc_file(newContact)
+            # now store cloud fraction during contact, if too high, skip it. Otherwise record contact
+            cf_daytotal=cf_daytotal+cf
+
             for ct in cloud_thresholds:
                 
                 if cf > ct:
@@ -148,8 +165,11 @@ for target in Targets:
                 
                 Targetcontact_num[ct]+=1
         
-            contacts.append(newContact)
+            daycontacts.append(usefulContact)
         
+    cf_daymean[target]=cf_daytotal/Targetcontact_num[100]
+    cf_allmean[target]=cf_alltotal/allcontactCount
+
     contact_per_tar[target]=Targetcontact_num
 
 # Print total contacts
@@ -158,5 +178,7 @@ for target in contact_per_tar:
     print(f"==> {target}")
     for ct, num in contact_per_tar[target].items():
      print(f"<={ct}% = {num}")
+    print(f"Mean cloud fraction(Day Contacts) = {cf_daymean[target]}")
+    print(f"Mean cloud fraction(ALL Contacts) = {cf_allmean[target]}")
     print(f"")
     
