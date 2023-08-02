@@ -182,3 +182,5 @@ for target in contact_per_tar:
     print(f"Mean cloud fraction(ALL Contacts) = {cf_allmean[target]}")
     print(f"")
     
+for contact in Totalcontacts:
+     print(f"Contact time = {contact.t_peak.utc}")
