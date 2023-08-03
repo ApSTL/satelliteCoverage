@@ -4,12 +4,21 @@ import numpy as np
 
 # Astrids code, just making it into a function
 def get_cloud_fraction_from_nc_file(
-    c: Contact,    
+    c: Contact,
+    fraction: str='',    
+    
 ) ->float:
 
-    contact_year= c.t_rise.utc_strftime('%Y')
-    contact_date= c.t_rise.utc_strftime('%Y%m%d')
+    contact_year= c.t_peak.utc_strftime('%Y')
+    contact_date= c.t_peak.utc_strftime('%Y%m%d')
 
+    
+    if fraction=='':
+        fraction_type='cfc'
+    else:
+        fraction_type=f"cfc_{fraction}"  
+        
+    
     nc_f = f"Global_Cloud_Data_{contact_year}/CFCdm{contact_date}000040019AVPOS01GL.nc"  # Your filename
 
     # 2018 file names are different, not sure why
@@ -21,7 +30,8 @@ def get_cloud_fraction_from_nc_file(
     lats = nc_fid.variables['lat'][:]  # extract/copy the data
     lons = nc_fid.variables['lon'][:]
 
-    cfc = nc_fid.variables['cfc'][:]
+    # string 'cfc_day' indicates im only pulling the mean cloud cover from the daytime hours
+    cfc = nc_fid.variables[fraction_type][:]
 
     lat = c.target.location.latitude.degrees
     lon = c.target.location.longitude.degrees

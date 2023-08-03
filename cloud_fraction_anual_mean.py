@@ -46,7 +46,7 @@ while year == startyear:
         lats = nc_fid.variables['lat'][:]  # extract/copy the data
         lons = nc_fid.variables['lon'][:]
 
-        cfc = nc_fid.variables['cfc'][:]
+        cfc = nc_fid.variables['cfc_day'][:]
 
         minlat = lat - 0.2
         maxlat = lat + 0.2
@@ -59,6 +59,12 @@ while year == startyear:
 
         cf = np.mean(cfc[0,indlat[:],indlon[:]])
 
+        mask_check = isinstance(cf, float)
+        
+        if mask_check == False:
+            continue
+        
+        
         cf_total[target]=cf_total[target]+cf
     
     # incriment the day and go again

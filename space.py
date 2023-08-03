@@ -9,19 +9,16 @@ from skyfield.api import load, utc, Timescale, EarthSatellite
 from classes import Spacecraft
 from space_track_api_script import space_track_api_request
 
-# Josh - Added arbitrary Sentinel-2 numbers.
 PLATFORM_ATTRIBS = {
 	"for": {  # Field of regard (half-angle)
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
 		# TODO Update to be realistic
 		"SKYSAT": radians(30.),
-		"SENTINEL2": radians(1.5)
 	},
 	"aq_prob": {  # probability that imaging opportunity results in capture
 		# TODO Update to be realistic
 		"FLOCK": 1.0,
 		"SKYSAT": 0.1,
-		"SENTINEL2":1.0
 	}
 }
 

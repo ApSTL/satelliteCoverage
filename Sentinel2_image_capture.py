@@ -16,8 +16,8 @@ Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
 cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
-start = datetime(2020, 1, 1, 0, 0, 0)
-end = datetime(2021, 1, 1, 0, 0, 0)
+start = datetime(2021, 1, 1, 0, 0, 0)
+end = datetime(2022, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -50,25 +50,33 @@ if not os.path.isfile(file_tle):  # If TLE file doesn't already exist, create it
 	file_norad = f"norad_ids//{platform}_ids.txt"
 	fetch_tle_and_write_to_txt(file_tle, file_norad, time_start, time_end)
 
-satellites={}
-for s in load.tle_file(file_tle):
-      satellites[s.model.satnum]=s
+
+sats=load.tle_file(file_tle)
+
+# satellites={}
+# for s in load.tle_file(file_tle):
+#       satellites[s.model.satnum]=s
 
 # Create Spacecraft objects for each item in the TLE dataset
 spacecraft_all = []
-for satellite_id, satellite in satellites.items():
-	spacecraft_all.append(Spacecraft(
-		satellite,
+for satellite in sats:
+    satname=satellite.name
+    
+    # Some TLE's dont have a name assigned, not sure why so just ignore them.
+    if satname=='TBA - TO BE ASSIGNED':
+        continue
+    
+    spacecraft_all.append(Spacecraft(		satellite,
 		[  # Field of regard (half angle, radians)
 			# we are associating all keys in PLATFORM_ATTRIBS["for"] with 'x' and then itterating over them
 			PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
-			if x in satellite.name
+			if x in satname
 		][0],
 		[  # Probability a location within the FoR will be acquired
 			PLATFORM_ATTRIBS["aq_prob"][x] for x in PLATFORM_ATTRIBS["aq_prob"]
-			if x in satellite.name
+			if x in satname
 		][0]
-	))      
+  ))
 
 # Initialise a list of contacts and dictionary for storing results
 Totalcontacts = []
@@ -96,11 +104,31 @@ for target in Targets:
     
     sun= Sun(lat, lon)
     
+    nextEpoch=0
+    satname=spacecraft_all[0].satellite.name
+    next_satname=satname
+    
     # For each satellite<>location pair, get all contact events during the horizon
     for s in spacecraft_all:
-    
-        t0_ts = load.timescale().from_datetime(start.astimezone(utc))
-        t1_ts = load.timescale().from_datetime(end.astimezone(utc))
+        nextEpoch+=1
+        satname=s.satellite.name
+        
+        # When we reach the end of the list, dont update next name
+        if nextEpoch<=len(spacecraft_all)-1:
+            next_satname=spacecraft_all[nextEpoch].satellite.name
+            
+        t0_ts = load.timescale().ut1_jd(s.satellite.epoch.ut1)
+        
+        # If the next satellite is different or there are no more TLEs to check, 
+        # run to the final date. Otherwise just use next epoch
+        if next_satname!=satname or nextEpoch>len(spacecraft_all)-1:
+            t1_ts = load.timescale().from_datetime(end.astimezone(utc))
+        else:
+            t1_ts = load.timescale().ut1_jd(spacecraft_all[nextEpoch].satellite.epoch.ut1)
+        
+        # if the epochs are the same (sometimes they are for some reason) just move to the next loop
+        if t0_ts==t1_ts:
+            continue
         
         # Set the elevation angle above the horizon that defines "contact",
 	    # depending on whether the location is a Target or Ground Station
@@ -128,8 +156,14 @@ for target in Targets:
             Totalcontacts.append(newContact)
             allcontactCount+=1
 
-            # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
-            cf=get_cloud_fraction_from_nc_file(newContact)
+            # now find day time cloud fraction during contact, if the data isnt there, use 24hr cloud fraction instead
+            cf=get_cloud_fraction_from_nc_file(newContact, 'day')
+            is_float = isinstance(cf, float)
+            
+            if is_float == False:
+                cf=get_cloud_fraction_from_nc_file(newContact)
+                
+            
             cf_alltotal=cf_alltotal+cf
 
             # If peak contact occurs before sunrise or after sunset, ignore it.
@@ -166,6 +200,9 @@ for target in Targets:
                 Targetcontact_num[ct]+=1
         
             daycontacts.append(usefulContact)
+      
+       
+        
         
     cf_daymean[target]=cf_daytotal/Targetcontact_num[100]
     cf_allmean[target]=cf_alltotal/allcontactCount
