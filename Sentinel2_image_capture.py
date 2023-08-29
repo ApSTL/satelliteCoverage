@@ -85,6 +85,8 @@ contact_per_tar={}
 
 cf_allmean={}
 cf_daymean={}
+fullContactCount={}
+
 
 # for each target, run through each spacecraft and find each contact event.
 # run through each cloud fraction threshold and count the contacts that meet them.
@@ -97,7 +99,7 @@ for target in Targets:
     cf_alltotal=0
     cf_daytotal=0
     allcontactCount=0
-
+    
     # initialise sun for the target location
     lat=target_location.location.latitude.degrees
     lon=target_location.location.longitude.degrees
@@ -206,7 +208,7 @@ for target in Targets:
         
     cf_daymean[target]=cf_daytotal/Targetcontact_num[100]
     cf_allmean[target]=cf_alltotal/allcontactCount
-
+    fullContactCount[target]=allcontactCount
     contact_per_tar[target]=Targetcontact_num
 
 # Print total contacts
@@ -217,7 +219,8 @@ for target in contact_per_tar:
      print(f"<={ct}% = {num}")
     print(f"Mean cloud fraction(Day Contacts) = {cf_daymean[target]}")
     print(f"Mean cloud fraction(ALL Contacts) = {cf_allmean[target]}")
+    print(f"Total Contacts = {fullContactCount[target]}")
     print(f"")
     
-for contact in Totalcontacts:
-     print(f"Contact time = {contact.t_peak.utc}")
+# for contact in Totalcontacts:
+#      print(f"Contact time = {contact.t_peak.utc}")
