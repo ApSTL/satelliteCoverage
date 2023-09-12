@@ -8,11 +8,16 @@ from math import radians, degrees
 from classes import Location, Spacecraft, Contact
 from space import  fetch_tle_and_write_to_txt, for_elevation_from_half_angle
 from ground import find_city_location
+import time 
+
+start_Walltime=time.time()
+start_CPUtime = time.process_time()
 
 # Most of the code taken from chris's scripts and adapted. Also adapted some code from Astrid.
 
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
-Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
+# Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
+Targets = ["Bobo-Dioulasso"]
 cloud_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
@@ -211,6 +216,9 @@ for target in Targets:
     fullContactCount[target]=allcontactCount
     contact_per_tar[target]=Targetcontact_num
 
+print("--- Executed in %s seconds (Wall time) ---" % (time.time() - start_Walltime))
+print("--- Executed in %s seconds (CPU time) ---" % (time.process_time() - start_CPUtime))
+
 # Print total contacts
 print(f"Number of possible images with cloud cover less than threshold between {start_string} and {end_string}:")
 for target in contact_per_tar:
@@ -221,6 +229,7 @@ for target in contact_per_tar:
     print(f"Mean cloud fraction(ALL Contacts) = {cf_allmean[target]}")
     print(f"Total Contacts = {fullContactCount[target]}")
     print(f"")
-    
+
+
 # for contact in Totalcontacts:
 #      print(f"Contact time = {contact.t_peak.utc}")
