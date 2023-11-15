@@ -9,17 +9,16 @@ from skyfield.api import load, utc, Timescale, EarthSatellite
 from classes import Spacecraft
 from space_track_api_script import space_track_api_request
 
-
 PLATFORM_ATTRIBS = {
 	"for": {  # Field of regard (half-angle)
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
 		# TODO Update to be realistic
-		"SKYSAT": radians(30.)
+		"SKYSAT": radians(30.),
 	},
 	"aq_prob": {  # probability that imaging opportunity results in capture
 		# TODO Update to be realistic
 		"FLOCK": 1.0,
-		"SKYSAT": 0.1
+		"SKYSAT": 0.1,
 	}
 }
 
@@ -164,6 +163,7 @@ def get_spacecraft_from_epoch(
 		spacecraft_all.append(Spacecraft(
 			satellite,
 			[  # Field of regard (half angle, radians)
+				# we are associating all keys in PLATFORM_ATTRIBS["for"] with 'x' and then itterating over them
 				PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
 				if x in satellite.name
 			][0],

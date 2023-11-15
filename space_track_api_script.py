@@ -88,4 +88,6 @@ print("Completed TLE request session")
 if __name__ == "__main__":
     start = "2023-03-01"
     end = "2023-03-02"
-    name = "FLOCK"
+    
+    #name = "FLOCK"
+    name = "SENTINEL"

@@ -50,7 +50,7 @@ class Contact:
 	def duration(self):
 		return 24 * 60 * 60 * (self.t_set - self.t_rise)
 
-	def __lt__(self, other):
+	def __lt__(self, other):				# Define what is meant when comparing one contact to another 
 		if self.t_peak.J <= other.t_peak.J:
 			return True
 		return False
