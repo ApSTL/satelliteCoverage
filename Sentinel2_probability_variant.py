@@ -25,7 +25,7 @@ end = datetime(2021, 1, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
-platform="sentinel2"
+platform="spire"
 R_E = 6371000.8  # Mean Earth radius
 
 
@@ -35,13 +35,15 @@ PLATFORM_ATTRIBS = {
 		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
 		# TODO Update to be realistic, currently using Sentinel 2 FOV (from Roy et al)
 		"SKYSAT": radians(30.),
-		"SENTINEL 2": radians(10.3)
+		"SENTINEL 2": radians(10.3),
+        "LEMUR": radians(10.3)
 	},
 	"aq_prob": {  # probability that imaging opportunity results in capture
 		# TODO Update to be realistic
 		"FLOCK": 1.0,
 		"SKYSAT": 0.1,
-		"SENTINEL 2":1.0
+		"SENTINEL 2":1.0,
+        "LEMUR":1.0
 	}
 }
 
@@ -121,7 +123,7 @@ for target in Targets:
                 continue
             
             # If peak contact occurs before sunrise or after sunset, ignore it.
-            # clunky but only way i can get this to work for now (numpy64 error)
+            # TODO clunky but only way i can get this to work for now (numpy64 error)
             ContactTime=t_peak.utc
             year=int(ContactTime.year)
             month=int(ContactTime.month)
@@ -137,8 +139,9 @@ for target in Targets:
             
             daytime=ImageTime>sunrise and ImageTime<sunset
             
-            if daytime==False:
-                continue
+            # NOTE Remove if you only care about contacts, not daytime images.
+            # if daytime==False:
+            #     continue
 
             # If rise and peak are defined AND they happened in the daytime, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
