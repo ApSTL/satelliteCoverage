@@ -20,14 +20,13 @@ Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
 prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
-start = datetime(2020, 1, 1, 0, 0, 0)
-end = datetime(2021, 1, 1, 0, 0, 0)
+start = datetime(2024, 1, 1, 0, 0, 0)
+end = datetime(2024, 6, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
 platform="spire"
 R_E = 6371000.8  # Mean Earth radius
-
 
 # Contstellation Attributes Dictionary.
 PLATFORM_ATTRIBS = {
@@ -145,15 +144,16 @@ for target in Targets:
 
             # If rise and peak are defined AND they happened in the daytime, Instantiate event
             newContact=Contact(s, target_location, t_rise, t_peak, ti)
-   
+
+            # NOTE Again if you only care about number of contacts, remove this part
             # now find cloud fraction during contact, if too high, skip it. Otherwise record contact
-            cf=get_cloud_fraction_from_nc_file(newContact)
-            prob_cloud_free=100-cf
+            # cf=get_cloud_fraction_from_nc_file(newContact)
+            # prob_cloud_free=100-cf
             
             for pt in prob_thresholds:
                 
-                if prob_cloud_free > pt:
-                    continue
+            #     if prob_cloud_free > pt:
+            #         continue
                 
                 Targetcontact_num[pt]+=1
         
