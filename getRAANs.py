@@ -1,7 +1,7 @@
 import os
+import csv
 
 from datetime import datetime
-
 from suntime import Sun
 from Astrid import get_cloud_fraction_from_nc_file
 from skyfield.api import load, utc
@@ -61,14 +61,15 @@ for s in load.tle_file(file_tle):
 
 raan_data = []
 # Loop through each satellite in the TLE file
-for satellite in satellites:
-    satnum = satellite.model.satnum  # Get the satellite number
-    raan = satellite.model.nodeo     # RAAN in degrees
-    raan_data.append([satnum, raan])  # Append as a list to raan_data
+for satnum, satellite in satellites.items():
+	raan_radians = satellite.model.nodeo  # RAAN in degrees
+	raan_degrees = degrees(raan_radians)
+	raan_data.append([satnum, raan_degrees])  # Append satellite number and RAAN
 
-    print(f"Satellite {satnum} - RAAN: {raan} degrees")
+
+	print(f"Satellite {satnum} - RAAN: {raan_degrees} degrees")
     
-    output_csv = 'satellite_raans.csv'
+output_csv = 'satellite_raans.csv'
 with open(output_csv, mode='w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(['Satellite Number', 'RAAN (degrees)'])  # Header
