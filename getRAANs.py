@@ -59,20 +59,25 @@ satellites={}
 for s in load.tle_file(file_tle):
       satellites[s.model.satnum]=s
 
+a_data = []
+e_data = []
+i_data = []
 raan_data = []
+u0_data = []
+elements = []
 # Loop through each satellite in the TLE file
 for satnum, satellite in satellites.items():
-	raan_radians = satellite.model.nodeo  # RAAN in degrees
-	raan_degrees = degrees(raan_radians)
-	raan_data.append([satnum, raan_degrees])  # Append satellite number and RAAN
-
-
-	print(f"Satellite {satnum} - RAAN: {raan_degrees} degrees")
+	a = 6378.135*1000* satellite.model.a
+	e = 0
+	i = degrees(satellite.model.inclo)
+	raan = degrees(satellite.model.nodeo)
+	u0 = degrees(satellite.model.mo)
+	elements.append([satnum, a, e, i, raan, u0])
     
-output_csv = 'satellite_raans.csv'
+output_csv = 'satellite_elements.csv'
 with open(output_csv, mode='w', newline='') as file:
     writer = csv.writer(file)
-    writer.writerow(['Satellite Number', 'RAAN (degrees)'])  # Header
-    writer.writerows(raan_data)  # Write data
+    writer.writerow(['Satellite Number','Semi-major axis(m)','eccentricity','inclination(degrees)', 'RAAN (degrees)','Argument of latitude(degrees)'])  # Header
+    writer.writerows(elements)  # Write data
 
-print(f"RAAN data saved to {output_csv}")
+print(f"Orbital Elements data saved to {output_csv}")
