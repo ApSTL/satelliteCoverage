@@ -2,13 +2,10 @@ import os
 import csv
 
 from datetime import datetime
-from suntime import Sun
-from Astrid import get_cloud_fraction_from_nc_file
-from skyfield.api import load, utc
-from math import radians, degrees
-from classes import Location, Spacecraft, Contact
-from space import  fetch_tle_and_write_to_txt, for_elevation_from_half_angle
-from ground import find_city_location
+from skyfield.api import load
+from math import degrees
+from space import  fetch_tle_and_write_to_txt
+
 
 # NOTE: A lot of the code is patched together from chris's scripts and adapted. Also adapted some code from Astrid.
 # The script gathers TLE data from a constellation during the given timeframe... 
@@ -27,24 +24,6 @@ end_string = end.strftime("%d-%m-%Y")
 
 platform="spire"
 R_E = 6371000.8  # Mean Earth radius
-
-# Contstellation Attributes Dictionary.
-PLATFORM_ATTRIBS = {
-	"for": {  # Field of regard (half-angle)
-		"FLOCK": radians(1.44763),  # 24km swath @ 476km alt
-		# TODO Update to be realistic, currently using Sentinel 2 FOV (from Roy et al)
-		"SKYSAT": radians(30.),
-		"SENTINEL 2": radians(10.3),
-        "LEMUR": radians(10.3)
-	},
-	"aq_prob": {  # probability that imaging opportunity results in capture
-		# TODO Update to be realistic
-		"FLOCK": 1.0,
-		"SKYSAT": 0.1,
-		"SENTINEL 2":1.0,
-        "LEMUR":1.0
-	}
-}
 
 # Get all TLE info for satellites within the timespan
 time_start = str(start)[0:10]
@@ -65,6 +44,7 @@ i_data = []
 raan_data = []
 u0_data = []
 elements = []
+
 # Loop through each satellite in the TLE file
 for satnum, satellite in satellites.items():
 	a = 6378.135*1000* satellite.model.a
@@ -73,7 +53,7 @@ for satnum, satellite in satellites.items():
 	raan = degrees(satellite.model.nodeo)
 	u0 = degrees(satellite.model.mo)
 	elements.append([satnum, a, e, i, raan, u0])
-    
+ 
 output_csv = 'satellite_elements.csv'
 with open(output_csv, mode='w', newline='') as file:
     writer = csv.writer(file)
