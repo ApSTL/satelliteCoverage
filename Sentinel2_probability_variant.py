@@ -16,7 +16,7 @@ from ground import find_city_location
 # the date of each contact is then compared with daily averaged cloud data to determine the probability that the image is cloud free.
 
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
-Targets = ["Solway firth", "Madrid", "Vilnius", "Bobo-Dioulasso"]
+Targets = ["Buenos Aires", "Tokyo","Longyearbyen","Kelowna","Kuala Lumpur","Glasgow","San Miguelito","Cape Town","Auckland","New Delhi"]
 prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
@@ -133,10 +133,10 @@ for target in Targets:
             
             ImageTime=datetime(year,month,day,hour,minute,second).astimezone(utc)
            
-            sunrise=sun.get_sunrise_time(ImageTime)
-            sunset=sun.get_sunset_time(ImageTime)
+            # sunrise=sun.get_sunrise_time(ImageTime)
+            # sunset=sun.get_sunset_time(ImageTime)
             
-            daytime=ImageTime>sunrise and ImageTime<sunset
+            # daytime=ImageTime>sunrise and ImageTime<sunset
             
             # NOTE Remove if you only care about contacts, not daytime images.
             # if daytime==False:
