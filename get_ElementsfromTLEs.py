@@ -18,7 +18,7 @@ prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
 start = datetime(2024, 1, 1, 0, 0, 0)
-end = datetime(2024, 6, 1, 0, 0, 0)
+end = datetime(2024, 2, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -54,7 +54,7 @@ for satnum, satellite in satellites.items():
 	u0 = degrees(satellite.model.mo)
 	elements.append([satnum, a, e, i, raan, u0])
  
-output_csv = 'satellite_elements.csv'
+output_csv = f'satellite_elements_{platform}.csv'
 with open(output_csv, mode='w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(['Satellite Number','Semi-major axis(m)','eccentricity','inclination(degrees)', 'RAAN (degrees)','Argument of latitude(degrees)'])  # Header
