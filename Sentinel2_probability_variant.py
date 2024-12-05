@@ -25,7 +25,7 @@ end = datetime(2024, 2, 1, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
-platform="spire"
+platform="flock"
 R_E = 6371000.8  # Mean Earth radius
 
 # Contstellation Attributes Dictionary.

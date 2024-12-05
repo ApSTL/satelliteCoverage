@@ -18,12 +18,16 @@ prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
 start = datetime(2024, 1, 1, 0, 0, 0)
-end = datetime(2024, 2, 1, 0, 0, 0)
+end = datetime(2024, 1, 7, 23, 59, 59)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
 platform="spire"
 R_E = 6371000.8  # Mean Earth radius
+
+# Skyfield timescale for TLE epoch conversion
+ts = load.timescale()
+start_ts = ts.utc(start.year, start.month, start.day, start.hour, start.minute, start.second)
 
 # Get all TLE info for satellites within the timespan
 time_start = str(start)[0:10]
@@ -36,7 +40,14 @@ if not os.path.isfile(file_tle):  # If TLE file doesn't already exist, create it
 
 satellites={}
 for s in load.tle_file(file_tle):
-      satellites[s.model.satnum]=s
+	satnum = s.model.satnum
+    # Simplified epoch conversion (21st century only)
+	tle_epoch = ts.utc(2000 + s.model.epochyr, s.model.epochdays)
+
+    # Check if this TLE is closer to the start time than the currently stored one
+	if satnum not in satellites or abs(tle_epoch - start_ts) < abs(satellites[satnum][1] - start_ts):
+		satellites[satnum] = (s, tle_epoch) 
+
 
 a_data = []
 e_data = []
@@ -46,7 +57,7 @@ u0_data = []
 elements = []
 
 # Loop through each satellite in the TLE file
-for satnum, satellite in satellites.items():
+for satnum, (satellite, tle_epoch) in satellites.items():
 	a = 6378.135*1000* satellite.model.a
 	e = 0
 	i = degrees(satellite.model.inclo)
