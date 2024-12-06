@@ -1,0 +1,151 @@
+import os
+
+from collections import defaultdict
+from datetime import datetime
+from skyfield.api import load, utc
+from math import radians, degrees
+from classes import Location, Spacecraft, Contact
+from space import fetch_tle_and_write_to_txt, for_elevation_from_half_angle
+from ground import find_city_location
+
+def remove_duplicates_from_tle_file(filename_tle: str):
+    # Step 1: Read the TLE data from the file
+    with open(filename_tle, "r") as file:
+        tle_lines = file.readlines()
+
+    # Step 2: Remove duplicates based on the epoch (second line of each TLE)
+    unique_tles = {}
+    unique_lines = []
+
+    # Iterate over every group of 3 lines (a single TLE)
+    for i in range(0, len(tle_lines), 3):  # TLEs are 3 lines long
+        tle_group = tle_lines[i:i+3]  # Each TLE is a group of 3 lines
+        satellite_name = tle_group[0].strip()  # The satellite name is in the first line
+        epoch = tle_group[1].strip().split()[3]  # The epoch is the 4th element in the second line
+
+        # Use the (satellite_name, epoch) as a unique identifier for the TLE
+        if (satellite_name, epoch) not in unique_tles:
+            unique_tles[(satellite_name, epoch)] = tle_group  # Store the full 3-line TLE group
+            unique_lines.extend(tle_group)  # Add the TLE group to the result list
+
+    # Step 3: Write the cleaned TLE data back to the file
+    with open(filename_tle, "w") as file:
+        file.writelines(unique_lines)
+
+
+# Targets and threshold values (unchanged)
+Targets = ["Buenos Aires", "Tokyo", "Longyearbyen", "Kelowna", "Kuala Lumpur", "Glasgow", "San Miguelito", "Cape Town", "Auckland", "New Delhi"]
+prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+
+# Start/End dates of the search (unchanged)
+start = datetime(2024, 1, 1, 0, 0, 0)
+end = datetime(2024, 1, 29, 0, 0, 0)
+
+platform = "spire"
+R_E = 6371000.8  # Mean Earth radius
+
+# Platform attributes (unchanged)
+PLATFORM_ATTRIBS = {
+    "for": {  # Field of regard (half-angle)
+        "FLOCK": radians(1.44763),  # 24km swath @ 476km alt
+        "SKYSAT": radians(30.),
+        "SENTINEL 2": radians(10.3),
+        "LEMUR": radians(10.3)
+    },
+    "aq_prob": {  # probability that imaging opportunity results in capture
+        "FLOCK": 1.0,
+        "SKYSAT": 0.1,
+        "SENTINEL 2": 1.0,
+        "LEMUR": 1.0
+    }
+}
+
+# Get all TLE info for satellites within the timespan (unchanged)
+time_start = str(start)[0:10]
+time_end = str(end)[0:10]
+
+file_tle = f"tle_data//{platform}_tle_{time_start}_{time_end}.txt"
+if not os.path.isfile(file_tle):  # If TLE file doesn't already exist, create it.
+    file_norad = f"norad_ids//{platform}_ids.txt"
+    fetch_tle_and_write_to_txt(file_tle, file_norad, time_start, time_end)
+    remove_duplicates_from_tle_file(file_tle)
+
+satellites = defaultdict(list)
+
+# Read the TLE data and store them by satellite ID (satnum)
+for s in load.tle_file(file_tle):
+    satellites[s.model.satnum].append(s)
+debug=1
+
+# Create Spacecraft objects for each item in the TLE dataset
+spacecraft_all = []
+for satellite_id, tle__list in satellites.items():
+	spacecraft_all.append(Spacecraft(
+		tle__list,
+		[  # Field of regard (half angle, radians)
+			# we are associating all keys in PLATFORM_ATTRIBS["for"] with 'x' and then itterating over them
+			PLATFORM_ATTRIBS["for"][x] for x in PLATFORM_ATTRIBS["for"]
+			if x in tle__list[0].name
+		][0],
+		[  # Probability a location within the FoR will be acquired
+			PLATFORM_ATTRIBS["aq_prob"][x] for x in PLATFORM_ATTRIBS["aq_prob"]
+			if x in tle__list[0].name
+		][0]
+	))   
+degbug=1
+
+contacts = []
+contact_per_tar={}
+
+for target in Targets:
+    target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
+    
+    # initialise sun for the target location
+    lat=target_location.location.latitude.degrees
+    lon=target_location.location.longitude.degrees
+
+    Targetcontact_num=0
+
+    # For each satellite<>location pair, get all contact events during the horizon
+    for s in spacecraft_all:
+        num_TLEs=len(s.satellite)
+        for i in range(len(s.satellite) - 1):
+            t0_ts = load.timescale().from_datetime(s.satellite[i].epoch.astimezone(utc))
+            if i+1<=num_TLEs:
+                t1_ts = load.timescale().from_datetime(s.satellite[i+1].epoch.astimezone(utc))
+            else:
+                t1_ts=t1_ts = load.timescale().from_datetime(end.astimezone(utc))
+
+            # Set the elevation angle above the horizon that defines "contact",
+            # depending on whether the location is a Target or Ground Station
+            elev_angle = degrees(for_elevation_from_half_angle(
+                s.for_,s.satellite[i].model.altp * R_E))
+            
+            t, events = s.satellite[i].find_events(
+                target_location.location, t0_ts,t1_ts, altitude_degrees=elev_angle)
+            # Pre-set times
+            t_rise = start
+            t_peak= start
+            
+            for ti, event in zip(t, events):
+                # if event is 0, it is a rise event, 1 is a peak. If it's neither, instantiate
+
+                if event == 0:
+                    t_rise = ti
+                    continue
+                if event == 1:
+                    t_peak = ti
+                    continue
+            
+                newContact=Contact(s, target_location, t_rise, t_peak, ti)
+
+                Targetcontact_num+=1
+            
+                contacts.append(newContact)
+
+    contact_per_tar[target]=Targetcontact_num
+
+# Print total contacts
+for target, val in contact_per_tar.items():
+    print(f"==> {target} = {val}")
+        
