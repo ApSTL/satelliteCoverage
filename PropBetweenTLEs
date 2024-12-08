@@ -1,5 +1,5 @@
 import os
-
+import matlab.engine
 from collections import defaultdict
 from datetime import datetime
 from skyfield.api import load, utc
@@ -32,14 +32,15 @@ def remove_duplicates_from_tle_file(filename_tle: str):
     with open(filename_tle, "w") as file:
         file.writelines(unique_lines)
 
-
+# prep MATLAB
+eng = matlab.engine.start_matlab()
 # Targets and threshold values (unchanged)
 Targets = ["Buenos Aires", "Tokyo", "Longyearbyen", "Kelowna", "Kuala Lumpur", "Glasgow", "San Miguelito", "Cape Town", "Auckland", "New Delhi"]
 prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search (unchanged)
-start = datetime(2024, 1, 1, 0, 0, 0)
-end = datetime(2024, 1, 29, 0, 0, 0)
+start = datetime(2024, 1, 22, 0, 0, 0)
+end = datetime(2024, 1, 28, 23, 59, 59)
 
 platform = "spire"
 R_E = 6371000.8  # Mean Earth radius
@@ -96,37 +97,49 @@ degbug=1
 
 contacts = []
 contact_per_tar={}
+contact_per_tar_MatrON={}
 
 for target in Targets:
     target_location=Location(target, find_city_location(target, "lat_lon_data/coverage_lat_lng.csv"))
     
     # initialise sun for the target location
-    lat=target_location.location.latitude.degrees
-    lon=target_location.location.longitude.degrees
-
+    tar_lat=matlab.double(target_location.location.latitude.degrees)
+    tar_lon=matlab.double(target_location.location.longitude.degrees)
+    
     Targetcontact_num=0
+    TargetcontactMatrON_num=0
 
     # For each satellite<>location pair, get all contact events during the horizon
     for s in spacecraft_all:
         num_TLEs=len(s.satellite)
-        for i in range(len(s.satellite) - 1):
-            t0_ts = load.timescale().from_datetime(s.satellite[i].epoch.astimezone(utc))
-            if i+1<=num_TLEs:
-                t1_ts = load.timescale().from_datetime(s.satellite[i+1].epoch.astimezone(utc))
+
+        for tle in range(len(s.satellite) - 1):
+            t0_ts = load.timescale().from_datetime(s.satellite[tle].epoch.astimezone(utc))
+            if tle+1<=num_TLEs:
+                t1_ts = load.timescale().from_datetime(s.satellite[tle+1].epoch.astimezone(utc))
             else:
                 t1_ts=t1_ts = load.timescale().from_datetime(end.astimezone(utc))
-
+            
+            a = matlab.double(6378.135*1000* s.satellite[tle].model.a)
+            e = matlab.double(0)
+            i = matlab.double(s.satellite[tle].model.inclo)
+            o = matlab.double(s.satellite[tle].model.nodeo)
+            u = matlab.double(s.satellite[tle].model.mo)
+            timespan = matlab.double((t1_ts.utc_datetime() - t0_ts.utc_datetime()).total_seconds())
+            halfangle=matlab.double(s.for_)
+            
             # Set the elevation angle above the horizon that defines "contact",
             # depending on whether the location is a Target or Ground Station
             elev_angle = degrees(for_elevation_from_half_angle(
-                s.for_,s.satellite[i].model.altp * R_E))
+                s.for_,s.satellite[tle].model.altp * R_E))
             
-            t, events = s.satellite[i].find_events(
+            t, events = s.satellite[tle].find_events(
                 target_location.location, t0_ts,t1_ts, altitude_degrees=elev_angle)
             # Pre-set times
             t_rise = start
             t_peak= start
             
+            # Use SGP4 to get contacts.
             for ti, event in zip(t, events):
                 # if event is 0, it is a rise event, 1 is a peak. If it's neither, instantiate
 
@@ -138,14 +151,35 @@ for target in Targets:
                     continue
             
                 newContact=Contact(s, target_location, t_rise, t_peak, ti)
-
                 Targetcontact_num+=1
             
                 contacts.append(newContact)
 
+            # Use MatrON to get contacts.
+            #TODO send target, timescale and TLE elements to matlab. receive back the total number of contacts with that target.
+            contacts_MatrON=eng.get_SatelliteContacts(tar_lat, tar_lon,timespan, a, e, i, o, u,halfangle)
+              
+            if isinstance(contacts_MatrON, matlab.double):  # Check if the result is a matlab.double object
+                if len(contacts_MatrON) > 0:  # Ensure it is not empty
+                    contacts_int = float(contacts_MatrON[0])  # Extract the scalar value
+                else:
+                    contacts_int = 0  # Default to 0 for empty results
+            elif contacts_MatrON is None or str(contacts_MatrON).strip() == '':
+                contacts_int = 0  # Force it to 0 if invalid
+            else:
+                # Convert non-matlab.double types to int directly
+                contacts_int = int(contacts_MatrON)
+
+            TargetcontactMatrON_num += contacts_int
+
+    contact_per_tar_MatrON[target]=TargetcontactMatrON_num
     contact_per_tar[target]=Targetcontact_num
 
 # Print total contacts
+print(f"SGP4 Propagation")
 for target, val in contact_per_tar.items():
     print(f"==> {target} = {val}")
-        
+print(f" ")
+print(f"MatrON Propagation")
+for target, val in contact_per_tar_MatrON.items():
+    print(f"==> {target} = {val}")
