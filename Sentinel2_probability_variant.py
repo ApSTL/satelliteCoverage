@@ -1,5 +1,5 @@
 import os
-
+import matlab.engine
 from datetime import datetime
 
 from suntime import Sun
@@ -9,19 +9,21 @@ from math import radians, degrees
 from classes import Location, Spacecraft, Contact
 from space import  fetch_tle_and_write_to_txt, for_elevation_from_half_angle
 from ground import find_city_location
+from math import radians, degrees
 
 # NOTE: A lot of the code is patched together from chris's scripts and adapted. Also adapted some code from Astrid.
 # The script gathers TLE data from a constellation during the given timeframe... 
 # isolates each satellite then determines all contacts with a series of ground lat/longs...
 # the date of each contact is then compared with daily averaged cloud data to determine the probability that the image is cloud free.
-
+# prep MATLAB
+eng = matlab.engine.start_matlab()
 # NOTE: This must match the name of the city in the coverage_lat_lng CSV
 Targets = ["Buenos Aires", "Tokyo","Longyearbyen","Kelowna","Kuala Lumpur","Glasgow","San Miguelito","Cape Town","Auckland","New Delhi"]
 prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search
 start = datetime(2024, 1, 1, 0, 0, 0)
-end = datetime(2024, 1, 8, 0, 0, 0)
+end = datetime(2024, 1, 3, 0, 0, 0)
 start_string = start.strftime("%d-%m-%Y")
 end_string = end.strftime("%d-%m-%Y")
 
@@ -78,6 +80,7 @@ for satellite_id, satellite in satellites.items():
 # Initialise a list of contacts and disctionary for storing results
 contacts = []
 contact_per_tar={}
+contact_per_tar_MatrON={}
 
 # for each target, run through each spacecraft and find each contact event.
 # run through each cloud fraction threshold and count the contacts that meet them.
@@ -87,7 +90,10 @@ for target in Targets:
     # initialise sun for the target location
     lat=target_location.location.latitude.degrees
     lon=target_location.location.longitude.degrees
-    
+    tar_lat=matlab.double(target_location.location.latitude.degrees)
+    tar_lon=matlab.double(target_location.location.longitude.degrees)
+    TargetcontactMatrON_num=0
+
     sun= Sun(lat, lon)
 
     Targetcontact_num={}
@@ -158,23 +164,62 @@ for target in Targets:
                 Targetcontact_num[pt]+=1
         
             contacts.append(newContact)
+            
+        # Use MatrON to get contacts.
+        #TODO send target, timescale and TLE elements to matlab. receive back the total number of contacts with that target.
         
+        a = matlab.double(6378.135*1000* s.satellite.model.a)
+        e = matlab.double(0)
+        i = matlab.double(s.satellite.model.inclo)
+        o = matlab.double(s.satellite.model.nodeo)
+        u = matlab.double(s.satellite.model.mo+s.satellite.model.argpo)
+        timespan = matlab.double((t1_ts.utc_datetime() - t0_ts.utc_datetime()).total_seconds())
+        halfangle=matlab.double(s.for_)
+        
+        contacts_MatrON=eng.get_SatelliteContacts(tar_lat, tar_lon,timespan, a, e, i, o, u,halfangle)
+              
+        if isinstance(contacts_MatrON, matlab.double):  # Check if the result is a matlab.double object
+            if len(contacts_MatrON) > 0:  # Ensure it is not empty
+                contacts_int = float(contacts_MatrON[0])  # Extract the scalar value
+            else:
+                contacts_int = 0  # Default to 0 for empty results
+        elif contacts_MatrON is None or str(contacts_MatrON).strip() == '':
+            contacts_int = 0  # Force it to 0 if invalid
+        else:
+            # Convert non-matlab.double types to int directly
+            contacts_int = int(contacts_MatrON)
+
+        TargetcontactMatrON_num += contacts_int
+        
+    contact_per_tar_MatrON[target]=TargetcontactMatrON_num
     contact_per_tar[target]=Targetcontact_num
 
 # Print total contacts
 # print(f"Number of images with probability of being cloud free between {start_string} and {end_string}:")
-for target in contact_per_tar:
-    print(f"==> {target}")
-    prev_pt=0
-    prev_num=0
+# for target in contact_per_tar:
+#     print(f"==> {target}")
+#     prev_pt=0
+#     prev_num=0
     
-    for pt, num in contact_per_tar[target].items():
-     print(f"{prev_pt}-{pt}% = {num-prev_num}")
-     prev_pt=pt
-     prev_num=num
+#     for pt, num in contact_per_tar[target].items():
+#      print(f"{prev_pt}-{pt}% = {num-prev_num}")
+#      prev_pt=pt
+#      prev_num=num
      
-    print(f"Total = {num}")
-    print(f"")
+#     print(f"Total = {num}")
+#     print(f"")
     
 # for contact in contacts:
 #     print('UTC date and time:', contact.t_peak.utc)
+
+# Print total contacts
+print(f"MatrON Propagation")
+for target, val in contact_per_tar_MatrON.items():
+    print(f"==> {target} = {val}")
+
+print(f" ")
+
+print(f"SGP4 Propagation")
+for target, val in contact_per_tar.items():
+    print(f"==> {target} = {val[100]}")
+print(f" ")
