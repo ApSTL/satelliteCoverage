@@ -39,10 +39,10 @@ Targets = ["Buenos Aires", "Tokyo", "Longyearbyen", "Kelowna", "Kuala Lumpur", "
 prob_thresholds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Start/End dates of the search (unchanged)
-start = datetime(2024, 1, 22, 0, 0, 0)
-end = datetime(2024, 1, 28, 23, 59, 59)
+start = datetime(2024, 1, 1, 0, 0, 0)
+end = datetime(2024, 12, 1, 0, 0, 0)
 
-platform = "spire"
+platform = "iridium-next"
 R_E = 6371000.8  # Mean Earth radius
 
 # Platform attributes (unchanged)
@@ -51,13 +51,15 @@ PLATFORM_ATTRIBS = {
         "FLOCK": radians(1.44763),  # 24km swath @ 476km alt
         "SKYSAT": radians(30.),
         "SENTINEL 2": radians(10.3),
-        "LEMUR": radians(10.3)
+        "LEMUR": radians(10.3),
+        "IRIDIUM": radians(10.3)
     },
     "aq_prob": {  # probability that imaging opportunity results in capture
         "FLOCK": 1.0,
         "SKYSAT": 0.1,
         "SENTINEL 2": 1.0,
-        "LEMUR": 1.0
+        "LEMUR": 1.0,
+        "IRIDIUM":1.0
     }
 }
 
@@ -124,7 +126,7 @@ for target in Targets:
             e = matlab.double(0)
             i = matlab.double(s.satellite[tle].model.inclo)
             o = matlab.double(s.satellite[tle].model.nodeo)
-            u = matlab.double(s.satellite[tle].model.mo)
+            u = matlab.double(s.satellite[tle].model.mo+s.satellite[tle].model.argpo)
             timespan = matlab.double((t1_ts.utc_datetime() - t0_ts.utc_datetime()).total_seconds())
             halfangle=matlab.double(s.for_)
             
@@ -176,10 +178,13 @@ for target in Targets:
     contact_per_tar[target]=Targetcontact_num
 
 # Print total contacts
+print(f"MatrON Propagation")
+for target, val in contact_per_tar_MatrON.items():
+    print(f"==> {target} = {val}")
+
+print(f" ")
+
 print(f"SGP4 Propagation")
 for target, val in contact_per_tar.items():
     print(f"==> {target} = {val}")
 print(f" ")
-print(f"MatrON Propagation")
-for target, val in contact_per_tar_MatrON.items():
-    print(f"==> {target} = {val}")

@@ -62,7 +62,7 @@ for satnum, (satellite, tle_epoch) in satellites.items():
 	e = 0
 	i = degrees(satellite.model.inclo)
 	raan = degrees(satellite.model.nodeo)
-	u0 = degrees(satellite.model.mo)
+	u0 = degrees(satellite.model.mo+satellite.model.argpo)
 	elements.append([satnum, a, e, i, raan, u0])
  
 output_csv = f'satellite_elements_{platform}.csv'
